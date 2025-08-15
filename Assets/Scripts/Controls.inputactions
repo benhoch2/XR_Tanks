@@ -1,0 +1,63 @@
+{
+    "version": 1,
+    "name": "Controls",
+    "maps": [
+        {
+            "name": "LeftJoystick",
+            "id": "01bfa86d-9014-4b5b-8a91-24cd399f6e75",
+            "actions": [
+                {
+                    "name": "New action",
+                    "type": "Value",
+                    "id": "89c8e30f-4b65-43d8-83f1-04f14fefaf7c",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "53b31d23-444a-4c33-bc30-9819435f34f1",
+                    "path": "<XRController>{RightHand}/thumbstick",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "New action",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        },
+        {
+            "name": "RightJoystick",
+            "id": "2c8a19e7-a247-411e-9ecd-84ade04a6da5",
+            "actions": [
+                {
+                    "name": "New action",
+                    "type": "Value",
+                    "id": "0884e3fa-a3d8-49f6-a9ea-900215f5a4b1",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "1e3d3c01-11a4-4ee8-ba38-41fef68033c6",
+                    "path": "<XRController>{RightHand}/thumbstick",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "New action",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}

@@ -1,34 +1,64 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;     // For Keyboard.current (New Input System)
+using UnityEngine.XR;              // For XRNode
 
 public class ShootingControls : MonoBehaviour
 {
-    [SerializeField] private GameObject projectilePrefab; // Prefab for the projectile
-    [SerializeField] private Transform firePoint; // Point from where the projectile will be fired
-    [SerializeField] private float minProjectileVelocity = 10f; // Minimum speed
-    [SerializeField] private float maxProjectileVelocity = 40f; // Maximum speed
-    [SerializeField] private float maxChargeTime = 2f; // Time to reach max velocity
+    [SerializeField] private GameObject projectilePrefab;
+    [SerializeField] private Transform firePoint;
+    [SerializeField] private float minProjectileVelocity = 10f;
+    [SerializeField] private float maxProjectileVelocity = 40f;
+    [SerializeField] private float maxChargeTime = 2f;
 
     private float chargeStartTime = 0f;
     private bool isCharging = false;
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
 
-    // Update is called once per frame
+    private bool lastTriggerPressed = false;
+
     void Update()
     {
-        // Start charging when space is pressed
-        if (Input.GetKeyDown(KeyCode.Space))
+        // --- Space bar ---
+        bool spacePressed = Keyboard.current?.spaceKey.wasPressedThisFrame ?? false;
+        bool spaceReleased = Keyboard.current?.spaceKey.wasReleasedThisFrame ?? false;
+
+        // --- Oculus right trigger (XR) ---
+        bool triggerPressed = false;
+        bool triggerReleased = false;
+
+        List<UnityEngine.XR.InputDevice> devices = new List<UnityEngine.XR.InputDevice>();
+        UnityEngine.XR.InputDevices.GetDevicesAtXRNode(XRNode.RightHand, devices);
+
+        if (devices.Count > 0)
+        {
+            var rightHand = devices[0];
+
+            if (rightHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.trigger, out float triggerValue))
+            {
+                bool isPressedNow = triggerValue > 0.1f;
+
+                triggerPressed = isPressedNow && !lastTriggerPressed;
+                triggerReleased = !isPressedNow && lastTriggerPressed;
+
+                if (triggerPressed)
+                    Debug.Log($"Oculus right trigger pressed: {triggerValue}");
+
+                if (triggerReleased)
+                    Debug.Log($"Oculus right trigger released: {triggerValue}");
+
+                lastTriggerPressed = isPressedNow;
+            }
+        }
+
+        // Start charging
+        if (spacePressed || triggerPressed)
         {
             chargeStartTime = Time.time;
             isCharging = true;
         }
-        // Shoot when space is released
-        if (Input.GetKeyUp(KeyCode.Space) && isCharging)
+
+        // Fire
+        if ((spaceReleased || triggerReleased) && isCharging)
         {
             float chargeDuration = Mathf.Clamp(Time.time - chargeStartTime, 0f, maxChargeTime);
             float velocity = Mathf.Lerp(minProjectileVelocity, maxProjectileVelocity, chargeDuration / maxChargeTime);

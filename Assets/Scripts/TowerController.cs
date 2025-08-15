@@ -1,11 +1,11 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.XR;
+using UnityEngine.InputSystem; // ✅ New Input System
 
-public class TowerController : MonoBehaviour
+public class TowerControllerSimple : MonoBehaviour
 {
     [Header("Tower Rotation Settings")]
-    [SerializeField] GameObject towerBase; // Reference to the tower base GameObject
+    [SerializeField] GameObject towerBase;
     public float rotationSpeed = 100f;
     public float tiltSpeed = 50f;
     public float minTilt = -10f;
@@ -13,94 +13,71 @@ public class TowerController : MonoBehaviour
 
     [Header("Tank Movement Settings")]
     public float moveSpeed = 5f;
-    public float strafeSpeed = 4f;
 
     private float currentTilt = 0f;
 
-    // Start is called before the first frame update
-    void Start()
-    {
-        // Initialization if needed
-    }
-
-    // Update is called once per frame
     void Update()
     {
-        HandleInput();
-    }
+        // --- VR joystick input ---
+        Vector2 leftStick = Vector2.zero;
+        Vector2 rightStick = Vector2.zero;
 
-    // Handles input for rotation and tilt
-    private void HandleInput()
-    {
-        float rotationInput = 0f;
-        float tiltInput = 0f;
-        float moveInput = 0f;
-        float turnInput = 0f;
 
-        // Keyboard input for tower
-        if (Input.GetKey(KeyCode.LeftArrow))
-            rotationInput = -1f;
-        else if (Input.GetKey(KeyCode.RightArrow))
-            rotationInput = 1f;
+        // After (fully qualified)
+        InputDevices.GetDeviceAtXRNode(XRNode.LeftHand)
+            .TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out leftStick);
 
-        if (Input.GetKey(KeyCode.UpArrow))
-            tiltInput = 1f;
-        else if (Input.GetKey(KeyCode.DownArrow))
-            tiltInput = -1f;
+        InputDevices.GetDeviceAtXRNode(XRNode.RightHand)
+            .TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out rightStick);
 
-        // Keyboard input for tank movement
-        if (Input.GetKey(KeyCode.W))
-            moveInput = 1f;
-        else if (Input.GetKey(KeyCode.S))
-            moveInput = -1f;
 
-        // Tank turning (A/D)
-        if (Input.GetKey(KeyCode.D))
-            turnInput = 1f;
-        else if (Input.GetKey(KeyCode.A))
-            turnInput = -1f;
+        // --- Keyboard fallback (new Input System) ---
+        float moveInput = leftStick.y;
+        float turnInput = leftStick.x;
+        float rotationInput = rightStick.x;
+        float tiltInput = rightStick.y;
 
-        // Future: Add Oculus controller input here
-        // Example: rotationInput += OculusInput.GetTowerRotation();
-        // Example: tiltInput += OculusInput.GetTowerTilt();
-        // Example: moveInput += OculusInput.GetTankMove();
-        // Example: turnInput += OculusInput.GetTankTurn();
+        // WASD for movement
+        if (Keyboard.current != null) {
+            if (Keyboard.current.wKey.isPressed) moveInput += 1f;
+            if (Keyboard.current.sKey.isPressed) moveInput -= 1f;
+            if (Keyboard.current.aKey.isPressed) turnInput -= 1f;
+            if (Keyboard.current.dKey.isPressed) turnInput += 1f;
+
+            // Arrows for turret control
+            if (Keyboard.current.leftArrowKey.isPressed) rotationInput -= 1f;
+            if (Keyboard.current.rightArrowKey.isPressed) rotationInput += 1f;
+            if (Keyboard.current.upArrowKey.isPressed) tiltInput += 1f;
+            if (Keyboard.current.downArrowKey.isPressed) tiltInput -= 1f;
+        }
 
         MoveTank(moveInput, turnInput);
         RotateTower(rotationInput);
         TiltTower(tiltInput);
     }
 
-    private void RotateTower(float input)
+    void MoveTank(float moveInput, float turnInput)
     {
-        if (input != 0f)
-        {
-            towerBase.transform.Rotate(Vector3.up, input * rotationSpeed * Time.deltaTime, Space.World);
-        }
+        if (Mathf.Abs(turnInput) > 0.01f)
+            transform.Rotate(Vector3.up, turnInput * rotationSpeed * Time.deltaTime);
+        if (Mathf.Abs(moveInput) > 0.01f)
+            transform.position += transform.forward * moveInput * moveSpeed * Time.deltaTime;
     }
 
-    private void TiltTower(float input)
+    void RotateTower(float input)
     {
-        if (input != 0f)
+        if (Mathf.Abs(input) > 0.01f)
+            towerBase.transform.Rotate(Vector3.up, input * rotationSpeed * Time.deltaTime, Space.World);
+    }
+
+    void TiltTower(float input)
+    {
+        if (Mathf.Abs(input) > 0.01f)
         {
             currentTilt = Mathf.Clamp(currentTilt + input * tiltSpeed * Time.deltaTime, minTilt, maxTilt);
             Vector3 localEuler = towerBase.transform.localEulerAngles;
             localEuler.x = currentTilt;
             towerBase.transform.localEulerAngles = localEuler;
         }
-
-    }
-
-    // Moves the tank using WASD input
-    private void MoveTank(float moveInput, float turnInput)
-    {
-        // Turn tank left/right
-        if (turnInput != 0f)
-        {
-            transform.Rotate(Vector3.up, turnInput * rotationSpeed * Time.deltaTime, Space.World);
-        }
-        // Move tank forward/backward
-        Vector3 move = transform.forward * moveInput * moveSpeed * Time.deltaTime;
-        transform.position += move;
     }
 }
