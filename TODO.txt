@@ -1,0 +1,4 @@
+1. add colliders to walls + floor + ceiling
+2. make tank fall from edge
+3. effect when missle hit
+4. destroy mesh when hitting walls.
