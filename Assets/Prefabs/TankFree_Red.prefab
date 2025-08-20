@@ -296,6 +296,7 @@ GameObject:
   - component: {fileID: 6530804518502666957}
   - component: {fileID: 1258455399915767812}
   - component: {fileID: 5513113246312555234}
+  - component: {fileID: 5196274824509777162}
   m_Layer: 0
   m_Name: TankFree_Red
   m_TagString: Untagged
@@ -391,7 +392,6 @@ MonoBehaviour:
   minTilt: -45
   maxTilt: 30
   moveSpeed: 1
-  strafeSpeed: 4
 --- !u!114 &5513113246312555234
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -407,6 +407,30 @@ MonoBehaviour:
   projectilePrefab: {fileID: 1720991040967052277, guid: bcbc50768d8331f42b5358c0cfd4ec18,
     type: 3}
   firePoint: {fileID: 2415187493405424666}
+  minProjectileVelocity: 2
+  maxProjectileVelocity: 20
+  maxChargeTime: 2
+--- !u!65 &5196274824509777162
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3503318476722469206}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1.9107852, y: 1.125915, z: 2.6642036}
+  m_Center: {x: 0.0000003874302, y: 0.06295732, z: -0.038929284}
 --- !u!1 &3745786531496338126
 GameObject:
   m_ObjectHideFlags: 0
