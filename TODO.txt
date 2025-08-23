@@ -1,5 +1,3 @@
-1. add colliders to walls + floor + ceiling
-2. handle tank flip.
 3. effect when missle hit
 4. destroy mesh when hitting walls.
 
