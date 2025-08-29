@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using Meta.XR.ImmersiveDebugger.UserInterface.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;     // For Keyboard.current (New Input System)
 using UnityEngine.XR;              // For XRNode
+using UnityEngine.UI;              // <-- added for Slider
 
 public class ShootingControls : MonoBehaviour
 {
@@ -10,11 +12,23 @@ public class ShootingControls : MonoBehaviour
     [SerializeField] private float minProjectileVelocity = 10f;
     [SerializeField] private float maxProjectileVelocity = 40f;
     [SerializeField] private float maxChargeTime = 2f;
+    [SerializeField] private UnityEngine.UI.Slider chargeSlider;
 
     private float chargeStartTime = 0f;
     private bool isCharging = false;
 
     private bool lastTriggerPressed = false;
+
+    void Start()
+    {
+        // initialize slider if assigned
+        if (chargeSlider != null)
+        {
+            chargeSlider.minValue = 0f;
+            chargeSlider.maxValue = 1f;
+            chargeSlider.value = 0f;
+        }
+    }
 
     void Update()
     {
@@ -55,6 +69,15 @@ public class ShootingControls : MonoBehaviour
         {
             chargeStartTime = Time.time;
             isCharging = true;
+            if (chargeSlider != null) chargeSlider.value = 0f;
+        }
+
+        // Update slider while charging
+        if (isCharging)
+        {
+            float chargeDurationNow = Mathf.Clamp(Time.time - chargeStartTime, 0f, maxChargeTime);
+            float normalized = (maxChargeTime > 0f) ? (chargeDurationNow / maxChargeTime) : 1f;
+            if (chargeSlider != null) chargeSlider.value = normalized;
         }
 
         // Fire
@@ -64,6 +87,7 @@ public class ShootingControls : MonoBehaviour
             float velocity = Mathf.Lerp(minProjectileVelocity, maxProjectileVelocity, chargeDuration / maxChargeTime);
             Shoot(velocity);
             isCharging = false;
+            if (chargeSlider != null) chargeSlider.value = 0f;
         }
     }
 
