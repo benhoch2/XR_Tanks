@@ -1,7 +1,93 @@
-Temp/
-Library/
-Logs/
-Build/
+# =========================================
+# Unity Core
+# =========================================
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+MemoryCaptures/
+Recordings/
+
+# =========================================
+# Unity Cache & Auto-generated
+# =========================================
+sysinfo.txt
+*.pidb
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
 *.csproj
+*.unityproj
 *.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.booproj
+*.svd
+*.DotSettings.user
+
+# =========================================
+# Unity Meta Files
+# =========================================
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# =========================================
+# Build Artifacts (General)
+# =========================================
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.exe
+*.ipa
+
+# =========================================
+# Oculus / VR Specific
+# =========================================
+# Oculus Android build cache
+/Assets/Plugins/Android/assets/bin/
+/Assets/Plugins/Android/assets/ovr_signature_file
+/Assets/Plugins/Android/assets/signature/
+/Assets/Plugins/Android/libs/
+/Assets/Plugins/Android/gradleTemplate.properties
+.gradle/
+
+# Oculus PC build outputs
+/Builds/OculusPC/
+/Builds/OculusQuest/
+/Builds/OculusLink/
+
+# =========================================
+# IDE & Editor
+# =========================================
+.vs/
+.idea/
+*.iml
+
+# =========================================
+# Addressables & Asset Bundles
+# =========================================
+/ServerData
+/[Aa]ssets/StreamingAssets/aa*
+/[Aa]ssets/AddressableAssetsData/link.xml*
+/[Aa]ssets/Addressables_Temp*
+/[Aa]ssets/AddressableAssetsData/*/*.bin*
+
+# =========================================
+# Visual Scripting auto-generated
+# =========================================
+/[Aa]ssets/Unity.VisualScripting.Generated/
+
+# =========================================
+# Crashlytics
+# =========================================
+crashlytics-build.properties
+
 
