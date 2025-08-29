@@ -3,7 +3,7 @@ using Meta.XR.ImmersiveDebugger.UserInterface.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;     // For Keyboard.current (New Input System)
 using UnityEngine.XR;              // For XRNode
-using UnityEngine.UI;              // <-- added for Slider
+using UnityEngine.UI;              // <-- can be removed if no other UI used
 
 public class ShootingControls : MonoBehaviour
 {
@@ -12,7 +12,7 @@ public class ShootingControls : MonoBehaviour
     [SerializeField] private float minProjectileVelocity = 10f;
     [SerializeField] private float maxProjectileVelocity = 40f;
     [SerializeField] private float maxChargeTime = 2f;
-    [SerializeField] private UnityEngine.UI.Slider chargeSlider;
+    [SerializeField] private PowerBar powerBar; // Optional PowerBar reference
 
     private float chargeStartTime = 0f;
     private bool isCharging = false;
@@ -21,13 +21,7 @@ public class ShootingControls : MonoBehaviour
 
     void Start()
     {
-        // initialize slider if assigned
-        if (chargeSlider != null)
-        {
-            chargeSlider.minValue = 0f;
-            chargeSlider.maxValue = 1f;
-            chargeSlider.value = 0f;
-        }
+        if (powerBar != null) powerBar.power = 0f;
     }
 
     void Update()
@@ -69,7 +63,7 @@ public class ShootingControls : MonoBehaviour
         {
             chargeStartTime = Time.time;
             isCharging = true;
-            if (chargeSlider != null) chargeSlider.value = 0f;
+            if (powerBar != null) powerBar.power = 0f;
         }
 
         // Update slider while charging
@@ -77,17 +71,19 @@ public class ShootingControls : MonoBehaviour
         {
             float chargeDurationNow = Mathf.Clamp(Time.time - chargeStartTime, 0f, maxChargeTime);
             float normalized = (maxChargeTime > 0f) ? (chargeDurationNow / maxChargeTime) : 1f;
-            if (chargeSlider != null) chargeSlider.value = normalized;
+            normalized = Mathf.Clamp01(normalized);
+            if (powerBar != null) powerBar.power = normalized;
         }
 
         // Fire
         if ((spaceReleased || triggerReleased) && isCharging)
         {
             float chargeDuration = Mathf.Clamp(Time.time - chargeStartTime, 0f, maxChargeTime);
-            float velocity = Mathf.Lerp(minProjectileVelocity, maxProjectileVelocity, chargeDuration / maxChargeTime);
+            float t = (powerBar != null) ? Mathf.Clamp01(powerBar.power) : ((maxChargeTime > 0f) ? chargeDuration / maxChargeTime : 1f);
+            float velocity = Mathf.Lerp(minProjectileVelocity, maxProjectileVelocity, t);
             Shoot(velocity);
             isCharging = false;
-            if (chargeSlider != null) chargeSlider.value = 0f;
+            if (powerBar != null) powerBar.power = 0f;
         }
     }
 
