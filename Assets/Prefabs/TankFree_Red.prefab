@@ -132,6 +132,7 @@ GameObject:
   - component: {fileID: 3631182569085828574}
   - component: {fileID: 6603361179781189605}
   - component: {fileID: 8207418915925417895}
+  - component: {fileID: 8441289499670968824}
   m_Layer: 0
   m_Name: TankFree_Wheel_b_left
   m_TagString: Untagged
@@ -205,6 +206,21 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &8441289499670968824
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134135820838050696}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9aced0eb4238004d8a2590bc0ffbd60, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  tankBody: {fileID: 3011469963919986407}
+  autoCalculateRadius: 0
+  wheelRadius: 0.1
 --- !u!1 &1150131645111040521
 GameObject:
   m_ObjectHideFlags: 0
@@ -728,6 +744,7 @@ GameObject:
   - component: {fileID: 3312167451838146087}
   - component: {fileID: 2582761013081684708}
   - component: {fileID: 7409220747806113731}
+  - component: {fileID: 1996691257256363561}
   m_Layer: 0
   m_Name: TankFree_Wheel_f_left
   m_TagString: Untagged
@@ -801,6 +818,21 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &1996691257256363561
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3745786531496338126}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9aced0eb4238004d8a2590bc0ffbd60, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  tankBody: {fileID: 3011469963919986407}
+  autoCalculateRadius: 0
+  wheelRadius: 0.1
 --- !u!1 &5219878769216273878
 GameObject:
   m_ObjectHideFlags: 0
@@ -812,6 +844,7 @@ GameObject:
   - component: {fileID: 9177045630194580144}
   - component: {fileID: 7941413351552715582}
   - component: {fileID: 6726093497014336210}
+  - component: {fileID: 3365462649053549916}
   m_Layer: 0
   m_Name: TankFree_Wheel_b_right
   m_TagString: Untagged
@@ -884,6 +917,21 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &3365462649053549916
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5219878769216273878}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9aced0eb4238004d8a2590bc0ffbd60, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  tankBody: {fileID: 3011469963919986407}
+  autoCalculateRadius: 0
+  wheelRadius: 0.1
 --- !u!1 &6714375316991963243
 GameObject:
   m_ObjectHideFlags: 0
@@ -1156,6 +1204,7 @@ GameObject:
   - component: {fileID: 301532880387059874}
   - component: {fileID: 208408940938093818}
   - component: {fileID: 2868187183817814119}
+  - component: {fileID: 1218580016692737829}
   m_Layer: 0
   m_Name: TankFree_Wheel_f_right
   m_TagString: Untagged
@@ -1228,3 +1277,18 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &1218580016692737829
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7734255842062806725}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9aced0eb4238004d8a2590bc0ffbd60, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  tankBody: {fileID: 3011469963919986407}
+  autoCalculateRadius: 0
+  wheelRadius: 0.1
