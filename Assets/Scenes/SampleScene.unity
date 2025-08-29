@@ -1512,7 +1512,7 @@ MonoBehaviour:
   Colliders: 1
   CutHoles: 0
   castShadows: 1
-  hideMesh: 1
+  hideMesh: 0
   Layer: 0
   textureCoordinateModes:
   - WallU: 5
