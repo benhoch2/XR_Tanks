@@ -10,6 +10,8 @@
 [Uu]ser[Ss]ettings/
 MemoryCaptures/
 Recordings/
+Builds/
+
 
 # =========================================
 # Unity Cache & Auto-generated
@@ -30,6 +32,7 @@ sysinfo.txt
 *.booproj
 *.svd
 *.DotSettings.user
+*.apk
 
 # =========================================
 # Unity Meta Files
