@@ -5,11 +5,10 @@ using UnityEngine.XR;
 
 public class ConifgUI : MonoBehaviour
 {
-    // name of the child GameObject to activate
-    [SerializeField] private string configCanvasChildName = "ConfigCanvas";
+    // Canvas to activate (assign in Inspector)
+    [SerializeField] private Transform configCanvas;
 
-    // distance in meters in front of the camera
-    [SerializeField] private float distanceFromCamera = 1.0f;
+    [SerializeField] private float menuDistance = 0.5f;
 
     // track previous both-pressed state to detect rising edge
     private bool lastBothPressed = false;
@@ -55,7 +54,10 @@ public class ConifgUI : MonoBehaviour
         // rising edge: both pressed now but weren't before
         if (bothPressed && !lastBothPressed)
         {
-            ActivateConfigCanvas();
+            if (configCanvas != null && !configCanvas.gameObject.activeSelf)
+            {
+                ActivateConfigCanvas();
+            }
         }
 
         lastBothPressed = bothPressed;
@@ -63,42 +65,58 @@ public class ConifgUI : MonoBehaviour
 
     private void ActivateConfigCanvas()
     {
-        Transform child = transform.Find(configCanvasChildName);
+        Transform child = configCanvas;
         if (child == null)
         {
-            Debug.LogWarning($"Config UI child '{configCanvasChildName}' not found under {name}.");
+            Debug.LogWarning($"Config UI reference not assigned on {name}.");
             return;
         }
 
         if (!child.gameObject.activeSelf)
             child.gameObject.SetActive(true);
 
-        // position the config UI in front of the camera (only change X and Z, preserve Y)
-        Camera cam = FindCamera();
-        if (cam == null)
-        {
-            Debug.LogWarning("No camera found to position ConfigCanvas.");
-            return;
-        }
+        child.position = GetSpawnLocation();
 
-        Vector3 desiredWorld = cam.transform.position + cam.transform.forward * distanceFromCamera;
-        Vector3 newPos = child.position;
-        newPos.x = desiredWorld.x;
-        newPos.z = desiredWorld.z;
-        // preserve child's current Y
-        child.position = newPos;
+        child.LookAt(Camera.main.transform);
+        child.Rotate(0, 180, 0); // face the camera
 
-        // Orient the canvas so it faces the camera: set the child's forward to -camera.forward
-        // (this ensures the canvas front faces the camera regardless of its local forward/back)
-        child.rotation = Quaternion.LookRotation(cam.transform.forward, cam.transform.up);
     }
 
     // simple camera finder: prefer Camera.main, otherwise first Camera in scene
-    private Camera FindCamera()
+    private Vector3 GetSpawnLocation()
     {
-        if (Camera.main != null) return Camera.main;
-        Camera any = GameObject.FindObjectOfType<Camera>();
-        return any;
+        Transform camTransform = null;
+        if (Camera.main != null)
+        {
+            camTransform = Camera.main.transform;
+        }
+        else
+        {
+            var cam = FindObjectOfType<Camera>();
+            if (cam != null)
+            {
+                Debug.LogWarning("No main camera tagged; using first camera found in scene.");
+                camTransform = cam.transform;
+            }
+        }
+
+        if (camTransform == null)
+        {
+            Debug.LogWarning("No camera found; returning current position as fallback.");
+            return transform.position;
+        }
+
+        // 1m away from the camera in the XZ plane, keeping the camera's Y value
+        Vector3 forwardXZ = new Vector3(camTransform.forward.x, 0f, camTransform.forward.z);
+        if (forwardXZ.sqrMagnitude < 1e-6f)
+        {
+            forwardXZ = Vector3.forward;
+        }
+        forwardXZ.Normalize();
+
+        Vector3 pos = camTransform.position + forwardXZ * menuDistance;
+        pos.y = camTransform.position.y; // keep Y
+        return pos;
     }
 }
 
