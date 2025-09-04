@@ -5,6 +5,8 @@ using UnityEngine.XR;
 
 public class ConifgUI : MonoBehaviour
 {
+    // Global flag to let gameplay scripts know when the config menu is open
+    public static bool IsMenuActive { get; private set; }
     // Canvas to activate (assign in Inspector)
     [SerializeField] private Transform configCanvas;
 
@@ -60,7 +62,10 @@ public class ConifgUI : MonoBehaviour
             }
         }
 
-        lastBothPressed = bothPressed;
+    lastBothPressed = bothPressed;
+
+    // Keep global flag in sync with the assigned canvas' active state
+    IsMenuActive = (configCanvas != null) && configCanvas.gameObject.activeSelf;
     }
 
     private void ActivateConfigCanvas()

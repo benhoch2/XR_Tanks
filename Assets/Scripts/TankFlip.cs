@@ -36,6 +36,14 @@ public class TankFlip : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        // Disable flip controls when config menu is active
+        if (ConifgUI.IsMenuActive)
+        {
+            holdTimer = 0f;
+            triggered = false;
+            return;
+        }
+
         // ensure we have a valid device reference
         if (!leftDevice.isValid)
         {
