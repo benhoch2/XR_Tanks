@@ -1,21 +1,18 @@
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
-public class SliderUpdater : MonoBehaviour
+public class NumberOfEnemiesCFG : MonoBehaviour
 {
     public Slider slider;
     public TextMeshProUGUI valueText;
 
     void Start()
     {
-        if (slider == null) return;
-
-        // Initialize slider from GameConfig.numberOfEnemies
-        float initial = Mathf.Clamp((float)GameConfig.numberOfEnemies, slider.minValue, slider.maxValue);
-        Debug.Log($"SliderUpdater setting initial slider value to {initial}");
-        slider.value = initial;
-
+        if (slider == null)
+            return;
         // Initialize text with current slider value
         UpdateText(slider.value);
 
@@ -28,5 +25,17 @@ public class SliderUpdater : MonoBehaviour
         // Cast to int since slider is whole numbers
         int intValue = Mathf.RoundToInt(value);
         valueText.text = intValue.ToString();
+    }
+
+    public void SetValue(int value)
+    {
+        Debug.Log($"NumberOfEnemiesCFG setting slider value to {value}");
+        slider.value = value;
+        UpdateText(value);
+    }
+
+    public int GetValue()
+    {
+        return Mathf.RoundToInt(slider.value);
     }
 }
