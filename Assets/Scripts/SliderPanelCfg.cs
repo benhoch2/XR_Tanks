@@ -4,7 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class NumberOfEnemiesCFG : MonoBehaviour
+public class SliderPanelCfg : MonoBehaviour
 {
     public Slider slider;
     public TextMeshProUGUI valueText;
@@ -29,7 +29,7 @@ public class NumberOfEnemiesCFG : MonoBehaviour
 
     public void SetValue(int value)
     {
-        Debug.Log($"NumberOfEnemiesCFG setting slider value to {value}");
+        Debug.Log($"SliderPanelCfg setting slider value to {value}");
         slider.value = value;
         UpdateText(value);
     }

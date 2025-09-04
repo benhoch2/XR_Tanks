@@ -14,8 +14,8 @@ public class ConfigManager : MonoBehaviour
     [SerializeField] private FindSpawnPositions tankSpawner;
     [SerializeField] private FindSpawnPositions crateSpawner;
 
-    [SerializeField] private NumberOfEnemiesCFG numberOfEnemiesCFG;
-    [SerializeField] private NumberOfEnemiesCFG numberOfCratesCFG;
+    [SerializeField] private SliderPanelCfg numberOfEnemiesCFG;
+    [SerializeField] private SliderPanelCfg numberOfCratesCFG;
 
     // Start is called before the first frame update
     void Awake()
