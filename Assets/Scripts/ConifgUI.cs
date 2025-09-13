@@ -11,9 +11,11 @@ public class ConifgUI : MonoBehaviour
     [SerializeField] private Transform configCanvas;
 
     [SerializeField] private float menuDistance = 0.5f;
-
-    // track previous both-pressed state to detect rising edge
-    private bool lastBothPressed = false;
+    // Y-button (left controller secondaryButton) hold settings
+    [SerializeField] private float yHoldSeconds = 0.5f;
+    private float yHoldTimer = 0f;
+    private bool yPrevPressed = false;
+    private bool holdTriggered = false;
 
     // Start is called before the first frame update
     void Start()
@@ -24,48 +26,61 @@ public class ConifgUI : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        bool leftPressed = false;
-        bool rightPressed = false;
+        bool yPressed = false;
 
+        // Check left-hand controller Y button (secondaryButton)
         List<InputDevice> leftDevices = new List<InputDevice>();
-        List<InputDevice> rightDevices = new List<InputDevice>();
-
         InputDevices.GetDevicesAtXRNode(XRNode.LeftHand, leftDevices);
-        InputDevices.GetDevicesAtXRNode(XRNode.RightHand, rightDevices);
-
         foreach (var d in leftDevices)
         {
-            if (d.TryGetFeatureValue(CommonUsages.primaryButton, out bool val) && val)
+            if (d.TryGetFeatureValue(CommonUsages.secondaryButton, out bool val) && val)
             {
-                leftPressed = true;
+                yPressed = true;
                 break;
             }
         }
 
-        foreach (var d in rightDevices)
+        bool menuIsActive = (configCanvas != null) && configCanvas.gameObject.activeSelf;
+
+        if (!menuIsActive)
         {
-            if (d.TryGetFeatureValue(CommonUsages.primaryButton, out bool val) && val)
+            // Hold-to-open behavior
+            if (yPressed)
             {
-                rightPressed = true;
-                break;
+                yHoldTimer += Time.deltaTime;
+                if (!holdTriggered && yHoldTimer >= yHoldSeconds)
+                {
+                    if (configCanvas != null && !configCanvas.gameObject.activeSelf)
+                    {
+                        ActivateConfigCanvas();
+                    }
+                    holdTriggered = true; // prevent retrigger while held
+                }
+            }
+            else
+            {
+                // reset when released
+                yHoldTimer = 0f;
+                holdTriggered = false;
+            }
+        }
+        else
+        {
+            // Press-to-close behavior (rising edge)
+            if (yPressed && !yPrevPressed)
+            {
+                configCanvas.gameObject.SetActive(false);
+                // reset timers so next open requires a full hold again
+                yHoldTimer = 0f;
+                holdTriggered = false;
             }
         }
 
-        bool bothPressed = leftPressed && rightPressed;
+        // Keep global flag in sync with the assigned canvas' active state
+        IsMenuActive = (configCanvas != null) && configCanvas.gameObject.activeSelf;
 
-        // rising edge: both pressed now but weren't before
-        if (bothPressed && !lastBothPressed)
-        {
-            if (configCanvas != null && !configCanvas.gameObject.activeSelf)
-            {
-                ActivateConfigCanvas();
-            }
-        }
-
-    lastBothPressed = bothPressed;
-
-    // Keep global flag in sync with the assigned canvas' active state
-    IsMenuActive = (configCanvas != null) && configCanvas.gameObject.activeSelf;
+        // remember previous button state
+        yPrevPressed = yPressed;
     }
 
     private void ActivateConfigCanvas()

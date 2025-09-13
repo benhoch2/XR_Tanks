@@ -584,7 +584,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 'Numeber of enemies
+  m_Text: 'Numeber of crates
 
 '
 --- !u!222 &287156664
@@ -1186,6 +1186,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1306446495}
     m_Modifications:
+    - target: {fileID: 813447375, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 435407831072319256, guid: 0a7d2469f24041c4284c66706f84c45e,
         type: 3}
       propertyPath: _leftEyeAnchor
@@ -1201,6 +1205,11 @@ PrefabInstance:
       propertyPath: _centerEyeCamera
       value: 
       objectReference: {fileID: 1232266052}
+    - target: {fileID: 1168042863143544391, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 2336446269904782542, guid: 0a7d2469f24041c4284c66706f84c45e,
         type: 3}
       propertyPath: _leftEyeAnchor
@@ -1216,6 +1225,11 @@ PrefabInstance:
       propertyPath: _centerEyeCamera
       value: 
       objectReference: {fileID: 1232266052}
+    - target: {fileID: 3903482226883268838, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 4148778239110795873, guid: 0a7d2469f24041c4284c66706f84c45e,
         type: 3}
       propertyPath: m_Name
@@ -1281,6 +1295,16 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 5106417804157790012, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5784408559141138614, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 5801245061754409418, guid: 0a7d2469f24041c4284c66706f84c45e,
         type: 3}
       propertyPath: _playerEyes
@@ -1291,11 +1315,31 @@ PrefabInstance:
       propertyPath: _playerOrigin
       value: 
       objectReference: {fileID: 1306446495}
+    - target: {fileID: 6147449420076126351, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 6267690530596161800, guid: 0a7d2469f24041c4284c66706f84c45e,
         type: 3}
       propertyPath: _ovrCameraRig
       value: 
       objectReference: {fileID: 1306446493}
+    - target: {fileID: 8702425413754196323, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8839895569409382208, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9170937211371257168, guid: 0a7d2469f24041c4284c66706f84c45e,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects:
     - {fileID: 4604000520904607249, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
@@ -3617,6 +3661,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   configCanvas: {fileID: 6498616698581400580}
   menuDistance: 0.5
+  yHoldSeconds: 1
 --- !u!222 &129808195709492367
 CanvasRenderer:
   m_ObjectHideFlags: 0

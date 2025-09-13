@@ -11,7 +11,7 @@ public class TankFlip : MonoBehaviour
     // Upward velocity applied after reset
     public float upVelocity = 2f;
 
-    private InputDevice leftDevice;
+    private InputDevice rightDevice;
     private float holdTimer = 0f;
     private bool triggered = false;
     private Rigidbody rb;
@@ -20,16 +20,16 @@ public class TankFlip : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        TryInitializeLeftDevice();
+        TryInitializeRightDevice();
     }
 
-    void TryInitializeLeftDevice()
+    void TryInitializeRightDevice()
     {
         var devices = new List<InputDevice>();
-        InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Left | InputDeviceCharacteristics.Controller, devices);
+        InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Right | InputDeviceCharacteristics.Controller, devices);
         if (devices.Count > 0)
         {
-            leftDevice = devices[0];
+            rightDevice = devices[0];
         }
     }
 
@@ -45,24 +45,23 @@ public class TankFlip : MonoBehaviour
         }
 
         // ensure we have a valid device reference
-        if (!leftDevice.isValid)
+        if (!rightDevice.isValid)
         {
-            TryInitializeLeftDevice();
+            TryInitializeRightDevice();
         }
 
-        if (!leftDevice.isValid)
+        if (!rightDevice.isValid)
         {
-            // no left controller available this frame
+            // no right controller available this frame
             return;
         }
 
-        bool xPressed = false;
-        bool yPressed = false;
+        bool bPressed = false;
 
-        leftDevice.TryGetFeatureValue(CommonUsages.primaryButton, out xPressed);   // typically X on left
-        leftDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out yPressed); // typically Y on left
+        // B button is typically secondaryButton on the right-hand controller
+        rightDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out bPressed);
 
-        if (xPressed && yPressed)
+        if (bPressed)
         {
             holdTimer += Time.deltaTime;
             if (!triggered && holdTimer >= holdDuration)
