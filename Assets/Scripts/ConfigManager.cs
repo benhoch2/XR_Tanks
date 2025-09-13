@@ -1,8 +1,4 @@
-using System.Collections;
-using System.Collections.Generic;
 using Meta.XR.MRUtilityKit;
-using Oculus.Platform;
-using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityEngine.SceneManagement; // <-- added
 

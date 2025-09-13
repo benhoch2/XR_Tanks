@@ -1,4 +1,3 @@
-using UnityEditor.PackageManager;
 
 [System.Serializable]
 public class GameConfig

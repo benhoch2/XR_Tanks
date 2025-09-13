@@ -743,7 +743,7 @@ GameObject:
   - component: {fileID: 343339044}
   - component: {fileID: 343339043}
   m_Layer: 0
-  m_Name: CratetSpawner
+  m_Name: CrateSpawner
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2929,7 +2929,7 @@ MonoBehaviour:
   Colliders: 1
   CutHoles: 0
   castShadows: 1
-  hideMesh: 0
+  hideMesh: 1
   Layer: 0
   textureCoordinateModes:
   - WallU: 5
@@ -2981,9 +2981,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0e617927a7d7ee6408b47225d9bae502, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  meshRoot: {fileID: 0}
-  continuousUpdate: 0
-  currentRoom: {fileID: 0}
 --- !u!1 &1444049082
 GameObject:
   m_ObjectHideFlags: 0
