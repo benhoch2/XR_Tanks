@@ -7,5 +7,5 @@ public class GameConfig
 
     public static int projectileMinSpeed = 1;
     public static int projectileMaxSpeed = 20;
-    public static float powerUpDuration = 2f;
+    public static int powerUpDuration = 2;
 }

@@ -4,28 +4,28 @@ using UnityEngine.SceneManagement; // <-- added
 
 public class ConfigManager : MonoBehaviour
 {
-    public GameConfig config;
-    
     [SerializeField] private GameObject configCanvas;
-    [SerializeField] private FindSpawnPositions tankSpawner;
+    [SerializeField] private FindSpawnPositions enemyTankSpawner;
     [SerializeField] private FindSpawnPositions crateSpawner;
 
     [SerializeField] private SliderPanelCfg numberOfEnemiesCFG;
     [SerializeField] private SliderPanelCfg numberOfCratesCFG;
+    [SerializeField] private SliderPanelCfg loadSecondsCFG;
 
     // Start is called before the first frame update
     void Awake()
     {
         Debug.Log("ConfigManager started");
-        if (tankSpawner != null)
+        if (enemyTankSpawner != null)
         {
-            tankSpawner.SpawnAmount = GameConfig.numberOfEnemies;
+            enemyTankSpawner.SpawnAmount = GameConfig.numberOfEnemies;
         }
 
         if (crateSpawner != null)
         {
             crateSpawner.SpawnAmount = GameConfig.numberOfCrates;
         }
+        
     }
 
     void Start()
@@ -33,9 +33,11 @@ public class ConfigManager : MonoBehaviour
         if (numberOfEnemiesCFG != null)
             numberOfEnemiesCFG.SetValue(GameConfig.numberOfEnemies);
 
-    
         if (numberOfCratesCFG != null)
             numberOfCratesCFG.SetValue(GameConfig.numberOfCrates);
+
+        if (loadSecondsCFG != null)
+            loadSecondsCFG.SetValue(GameConfig.powerUpDuration);
     }
 
     // Update is called once per frame
@@ -63,5 +65,6 @@ public class ConfigManager : MonoBehaviour
         Debug.Log("Save button pressed");
         GameConfig.numberOfEnemies = numberOfEnemiesCFG.GetValue();
         GameConfig.numberOfCrates = numberOfCratesCFG.GetValue();
+        GameConfig.powerUpDuration = loadSecondsCFG.GetValue();
     }
 }

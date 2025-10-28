@@ -19,6 +19,11 @@ public class ShootingControls : MonoBehaviour
 
     private bool lastTriggerPressed = false;
 
+    void Awake()
+    {
+        maxChargeTime = GameConfig.powerUpDuration;
+    }
+
     void Start()
     {
         if (powerBar != null) powerBar.power = 0f;
