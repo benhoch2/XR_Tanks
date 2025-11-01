@@ -155,7 +155,7 @@ RectTransform:
   m_Father: {fileID: 1007460912}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1030,7 +1030,7 @@ RectTransform:
   m_Father: {fileID: 1329790595}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1136,7 +1136,7 @@ RectTransform:
   m_Father: {fileID: 1421413193}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1885,7 +1885,7 @@ RectTransform:
   m_Father: {fileID: 1455366952}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -2939,7 +2939,7 @@ RectTransform:
   m_Father: {fileID: 941246971}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -3465,7 +3465,7 @@ RectTransform:
   m_Father: {fileID: 1143232993}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -3821,10 +3821,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   configCanvas: {fileID: 2705655916390127916}
-  tankSpawner: {fileID: 1464069285}
+  enemyTankSpawner: {fileID: 0}
   crateSpawner: {fileID: 343339043}
   numberOfEnemiesCFG: {fileID: 1000517636}
   numberOfCratesCFG: {fileID: 1048551413}
+  loadSecondsCFG: {fileID: 0}
 --- !u!4 &1612370750
 Transform:
   m_ObjectHideFlags: 0
@@ -5758,7 +5759,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2748001567504577581
 RectTransform:
   m_ObjectHideFlags: 0
@@ -6381,9 +6382,9 @@ RectTransform:
   - {fileID: 5756702856371563799}
   m_Father: {fileID: 6498616698581400580}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 475, y: -225}
   m_SizeDelta: {x: 399, y: 495.4}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &3742655895410898615
