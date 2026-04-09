@@ -95,7 +95,7 @@ public class ShootingControls : MonoBehaviour
             Rigidbody rb = projectile.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                rb.velocity = firePoint.forward * velocity;
+                rb.linearVelocity = firePoint.forward * velocity;
             }
         }
     }

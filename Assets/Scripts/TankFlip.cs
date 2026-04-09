@@ -81,7 +81,7 @@ public class TankFlip : MonoBehaviour
 
         if (rb != null)
         {
-            rb.velocity = Vector3.up * upVelocity;
+            rb.linearVelocity = Vector3.up * upVelocity;
         }
         else
         {
