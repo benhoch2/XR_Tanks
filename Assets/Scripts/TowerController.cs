@@ -18,10 +18,6 @@ public class TowerControllerSimple : MonoBehaviour
 
     void Update()
     {
-        // Disable controls when config menu is active
-        if (ConifgUI.IsMenuActive)
-            return;
-
         // --- VR joystick input ---
         Vector2 leftStick = Vector2.zero;
         Vector2 rightStick = Vector2.zero;

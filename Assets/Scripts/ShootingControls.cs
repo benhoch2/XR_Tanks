@@ -1,9 +1,7 @@
 using System.Collections.Generic;
-using Meta.XR.ImmersiveDebugger.UserInterface.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;     // For Keyboard.current (New Input System)
 using UnityEngine.XR;              // For XRNode
-using UnityEngine.UI;              // <-- can be removed if no other UI used
 
 public class ShootingControls : MonoBehaviour
 {
@@ -31,18 +29,6 @@ public class ShootingControls : MonoBehaviour
 
     void Update()
     {
-        // Disable shooting input when config menu is active
-        if (ConifgUI.IsMenuActive)
-        {
-            // cancel any charging in progress while menu is open
-            if (isCharging)
-            {
-                isCharging = false;
-                if (powerBar != null) powerBar.power = 0f;
-            }
-            return;
-        }
-
         // --- Space bar ---
         bool spacePressed = Keyboard.current?.spaceKey.wasPressedThisFrame ?? false;
         bool spaceReleased = Keyboard.current?.spaceKey.wasReleasedThisFrame ?? false;
