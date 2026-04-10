@@ -151,7 +151,6 @@ GameObject:
   - component: {fileID: 1732564122084448658}
   - component: {fileID: 8740259228613128732}
   - component: {fileID: 2663491468120010981}
-  - component: {fileID: 5181382479168437595}
   m_Layer: 5
   m_Name: Text Button
   m_TagString: Untagged
@@ -293,24 +292,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &5181382479168437595
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 296236354128931841}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 07b3638c2f5db5b479ff24c2859713d4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_PokeFollowTransform: {fileID: 3608403417279136374}
-  m_SmoothingSpeed: 16
-  m_ReturnToInitialPosition: 1
-  m_ApplyIfChildIsTarget: 1
-  m_ClampToMaxDistance: 1
-  m_MaxDistance: 20
 --- !u!1 &637897684012836236
 GameObject:
   m_ObjectHideFlags: 0
@@ -323,7 +304,6 @@ GameObject:
   - component: {fileID: 2797130911279197101}
   - component: {fileID: 5673337647331521481}
   - component: {fileID: 3840105802686811174}
-  - component: {fileID: 3372328547893674265}
   m_Layer: 5
   m_Name: Text Toggle
   m_TagString: Untagged
@@ -449,24 +429,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &3372328547893674265
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 637897684012836236}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 07b3638c2f5db5b479ff24c2859713d4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_PokeFollowTransform: {fileID: 9112665936702075901}
-  m_SmoothingSpeed: 16
-  m_ReturnToInitialPosition: 1
-  m_ApplyIfChildIsTarget: 1
-  m_ClampToMaxDistance: 1
-  m_MaxDistance: 20
 --- !u!1 &642425233938335263
 GameObject:
   m_ObjectHideFlags: 0
@@ -519,7 +481,6 @@ GameObject:
   - component: {fileID: 4628950421726869148}
   - component: {fileID: 8089712802142953215}
   - component: {fileID: 1734412582133809861}
-  - component: {fileID: 1147842538095856976}
   m_Layer: 5
   m_Name: Text Button
   m_TagString: Untagged
@@ -661,24 +622,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &1147842538095856976
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 980669041477811019}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 07b3638c2f5db5b479ff24c2859713d4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_PokeFollowTransform: {fileID: 3546574645839470178}
-  m_SmoothingSpeed: 16
-  m_ReturnToInitialPosition: 1
-  m_ApplyIfChildIsTarget: 1
-  m_ClampToMaxDistance: 1
-  m_MaxDistance: 20
 --- !u!1 &1035453211507866242
 GameObject:
   m_ObjectHideFlags: 0
@@ -1576,7 +1519,6 @@ GameObject:
   - component: {fileID: 1740933216690354588}
   - component: {fileID: 4702400269312572628}
   - component: {fileID: 4334316198687704799}
-  - component: {fileID: 310976381038372380}
   - component: {fileID: 9067671628400525398}
   m_Layer: 5
   m_Name: ConfigCanvas
@@ -1669,25 +1611,6 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 4294967295
---- !u!114 &310976381038372380
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2705655916589337973}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_IgnoreReversedGraphics: 0
-  m_CheckFor2DOcclusion: 0
-  m_CheckFor3DOcclusion: 0
-  m_BlockingMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_RaycastTriggerInteraction: 1
 --- !u!114 &9067671628400525398
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1952,7 +1875,6 @@ GameObject:
   - component: {fileID: 1156402469837942678}
   - component: {fileID: 6248410582031728797}
   - component: {fileID: 5934321996829300776}
-  - component: {fileID: 5411199575915450190}
   m_Layer: 5
   m_Name: Interactive Controls
   m_TagString: Untagged
@@ -2091,25 +2013,6 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
---- !u!114 &5411199575915450190
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3178275667912107960}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7951c64acb0fa62458bf30a60089fe2d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_IgnoreReversedGraphics: 0
-  m_CheckFor2DOcclusion: 0
-  m_CheckFor3DOcclusion: 1
-  m_BlockingMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_RaycastTriggerInteraction: 1
 --- !u!1 &3295873300731743134
 GameObject:
   m_ObjectHideFlags: 0
@@ -3403,7 +3306,6 @@ GameObject:
   - component: {fileID: 5636356969464673326}
   - component: {fileID: 3264531932363278782}
   - component: {fileID: 485300290486663863}
-  - component: {fileID: 4451017928709123078}
   m_Layer: 0
   m_Name: Icon Toggle
   m_TagString: Untagged
@@ -3529,24 +3431,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4893141425657469582}
   m_CullTransparentMesh: 1
---- !u!114 &4451017928709123078
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4893141425657469582}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 07b3638c2f5db5b479ff24c2859713d4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_PokeFollowTransform: {fileID: 195070401219391795}
-  m_SmoothingSpeed: 16
-  m_ReturnToInitialPosition: 1
-  m_ApplyIfChildIsTarget: 1
-  m_ClampToMaxDistance: 1
-  m_MaxDistance: 20
 --- !u!1 &5052111414861100005
 GameObject:
   m_ObjectHideFlags: 0
@@ -3687,7 +3571,6 @@ GameObject:
   - component: {fileID: 2798031959264214227}
   - component: {fileID: 6221648912731851617}
   - component: {fileID: 8222643997236256018}
-  - component: {fileID: 187496346003703071}
   m_Layer: 5
   m_Name: Text Button
   m_TagString: Untagged
@@ -3829,24 +3712,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &187496346003703071
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5209149049422918405}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 07b3638c2f5db5b479ff24c2859713d4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_PokeFollowTransform: {fileID: 6795216095668442914}
-  m_SmoothingSpeed: 16
-  m_ReturnToInitialPosition: 1
-  m_ApplyIfChildIsTarget: 1
-  m_ClampToMaxDistance: 1
-  m_MaxDistance: 20
 --- !u!1 &5238175072040978884
 GameObject:
   m_ObjectHideFlags: 0
