@@ -25,35 +25,46 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Min = 1, Max = 10, Category = "Game Config")]
     public int powerUpDuration = 2;
 
-    [Header("Spawners (assign in Inspector)")]
-    [SerializeField] private FindSpawnPositions enemyTankSpawner;
-    [SerializeField] private FindSpawnPositions crateSpawner;
-
     void Awake()
     {
         if (Instance != null && Instance != this)
         {
-            // Copy persisted values from surviving instance
             Destroy(gameObject);
             return;
         }
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
-    void Start()
+    void OnDestroy()
     {
-        ApplySpawnerConfig();
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
-    private void ApplySpawnerConfig()
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (enemyTankSpawner != null)
-            enemyTankSpawner.SpawnAmount = numberOfEnemies;
+        FindAndApplySpawnerConfig();
+    }
 
-        if (crateSpawner != null)
-            crateSpawner.SpawnAmount = numberOfCrates;
+    private void FindAndApplySpawnerConfig()
+    {
+        // Re-find spawners in the new scene by tag or name
+        foreach (var spawner in FindObjectsByType<FindSpawnPositions>(FindObjectsSortMode.None))
+        {
+            var go = spawner.gameObject;
+            if (go.name.Contains("Tank"))
+            {
+                spawner.SpawnAmount = numberOfEnemies;
+                Debug.Log($"[GameConfig] Set enemy spawner to {numberOfEnemies}");
+            }
+            else if (go.name.Contains("Target"))
+            {
+                spawner.SpawnAmount = numberOfCrates;
+                Debug.Log($"[GameConfig] Set crate spawner to {numberOfCrates}");
+            }
+        }
     }
 
     [DebugMember(Category = "Game Config")]
