@@ -11,7 +11,7 @@ public class TankFlip : MonoBehaviour
     // Upward velocity applied after reset
     public float upVelocity = 2f;
 
-    private InputDevice leftDevice;
+    private InputDevice rightDevice;
     private float holdTimer = 0f;
     private bool triggered = false;
     private Rigidbody rb;
@@ -20,41 +20,48 @@ public class TankFlip : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        TryInitializeLeftDevice();
+        TryInitializeRightDevice();
     }
 
-    void TryInitializeLeftDevice()
+    void TryInitializeRightDevice()
     {
         var devices = new List<InputDevice>();
-        InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Left | InputDeviceCharacteristics.Controller, devices);
+        InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Right | InputDeviceCharacteristics.Controller, devices);
         if (devices.Count > 0)
         {
-            leftDevice = devices[0];
+            rightDevice = devices[0];
         }
     }
 
     // Update is called once per frame
     void Update()
     {
-        // ensure we have a valid device reference
-        if (!leftDevice.isValid)
+        // Disable flip controls when config menu is active
+        if (ConifgUI.IsMenuActive)
         {
-            TryInitializeLeftDevice();
-        }
-
-        if (!leftDevice.isValid)
-        {
-            // no left controller available this frame
+            holdTimer = 0f;
+            triggered = false;
             return;
         }
 
-        bool xPressed = false;
-        bool yPressed = false;
+        // ensure we have a valid device reference
+        if (!rightDevice.isValid)
+        {
+            TryInitializeRightDevice();
+        }
 
-        leftDevice.TryGetFeatureValue(CommonUsages.primaryButton, out xPressed);   // typically X on left
-        leftDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out yPressed); // typically Y on left
+        if (!rightDevice.isValid)
+        {
+            // no right controller available this frame
+            return;
+        }
 
-        if (xPressed && yPressed)
+        bool bPressed = false;
+
+        // B button is typically secondaryButton on the right-hand controller
+        rightDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out bPressed);
+
+        if (bPressed)
         {
             holdTimer += Time.deltaTime;
             if (!triggered && holdTimer >= holdDuration)

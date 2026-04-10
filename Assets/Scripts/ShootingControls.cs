@@ -19,6 +19,11 @@ public class ShootingControls : MonoBehaviour
 
     private bool lastTriggerPressed = false;
 
+    void Awake()
+    {
+        maxChargeTime = GameConfig.powerUpDuration;
+    }
+
     void Start()
     {
         if (powerBar != null) powerBar.power = 0f;
@@ -26,6 +31,18 @@ public class ShootingControls : MonoBehaviour
 
     void Update()
     {
+        // Disable shooting input when config menu is active
+        if (ConifgUI.IsMenuActive)
+        {
+            // cancel any charging in progress while menu is open
+            if (isCharging)
+            {
+                isCharging = false;
+                if (powerBar != null) powerBar.power = 0f;
+            }
+            return;
+        }
+
         // --- Space bar ---
         bool spacePressed = Keyboard.current?.spaceKey.wasPressedThisFrame ?? false;
         bool spaceReleased = Keyboard.current?.spaceKey.wasReleasedThisFrame ?? false;

@@ -406,11 +406,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   towerBase: {fileID: 2457601262040078919}
-  rotationSpeed: 100
-  tiltSpeed: 50
+  rotationSpeed: 50
+  tiltSpeed: 30
   minTilt: -45
   maxTilt: 30
-  moveSpeed: 1
+  moveSpeed: 0.5
 --- !u!114 &5513113246312555234
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -490,7 +490,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea828a0fa54ccfb408d2bacb74d4c3b5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  holdDuration: 3
+  holdDuration: 1
   upVelocity: 1.5
 --- !u!1 &3745786531496338126
 GameObject:
