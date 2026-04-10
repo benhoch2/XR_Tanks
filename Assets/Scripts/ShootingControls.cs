@@ -19,7 +19,9 @@ public class ShootingControls : MonoBehaviour
 
     void Awake()
     {
-        maxChargeTime = GameConfig.powerUpDuration;
+        var config = GameConfigManager.Instance;
+        if (config != null)
+            maxChargeTime = config.powerUpDuration;
     }
 
     void Start()
