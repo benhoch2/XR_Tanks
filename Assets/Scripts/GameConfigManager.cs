@@ -57,10 +57,11 @@ public class GameConfigManager : MonoBehaviour
     private IEnumerator SubscribeToDebugPanel()
     {
         // Wait for the Immersive Debugger panel to be created
+        // The panel may start inactive (hidden), so we must include inactive objects
         DebugInterface panel = null;
         for (int i = 0; i < 600; i++) // wait up to ~10 seconds
         {
-            panel = FindAnyObjectByType<DebugInterface>();
+            panel = FindAnyObjectByType<DebugInterface>(FindObjectsInactive.Include);
             if (panel != null) break;
             yield return null;
         }
