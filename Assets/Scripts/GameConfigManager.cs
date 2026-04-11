@@ -1,3 +1,4 @@
+using System.Collections;
 using Meta.XR.ImmersiveDebugger;
 using Meta.XR.MRUtilityKit;
 using UnityEngine;
@@ -46,25 +47,68 @@ public class GameConfigManager : MonoBehaviour
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         FindAndApplySpawnerConfig();
+        StartCoroutine(MovePlayerTankToHeadset());
     }
 
     private void FindAndApplySpawnerConfig()
     {
-        // Re-find spawners in the new scene by tag or name
         foreach (var spawner in FindObjectsByType<FindSpawnPositions>(FindObjectsSortMode.None))
         {
-            var go = spawner.gameObject;
-            if (go.name.Contains("Tank"))
+            if (spawner.SpawnObject == null) continue;
+
+            string objName = spawner.SpawnObject.name;
+
+            if (objName.Contains("TargetTank"))
             {
                 spawner.SpawnAmount = numberOfEnemies;
-                Debug.Log($"[GameConfig] Set enemy spawner to {numberOfEnemies}");
+                Debug.Log($"[GameConfig] Set enemy spawner ({objName}) to {numberOfEnemies}");
             }
-            else if (go.name.Contains("Target"))
+            else if (objName.Contains("TargetBox"))
             {
                 spawner.SpawnAmount = numberOfCrates;
-                Debug.Log($"[GameConfig] Set crate spawner to {numberOfCrates}");
+                Debug.Log($"[GameConfig] Set crate spawner ({objName}) to {numberOfCrates}");
             }
         }
+    }
+
+    private IEnumerator MovePlayerTankToHeadset()
+    {
+        // Wait for MRUK to spawn the player tank (it spawns via a scene-loaded callback)
+        ShootingControls playerTank = null;
+        for (int i = 0; i < 300; i++) // wait up to ~5 seconds
+        {
+            playerTank = FindAnyObjectByType<ShootingControls>();
+            if (playerTank != null) break;
+            yield return null;
+        }
+
+        if (playerTank == null)
+        {
+            Debug.LogWarning("[GameConfig] Player tank not found, cannot reposition near headset.");
+            yield break;
+        }
+
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            Debug.LogWarning("[GameConfig] Main camera not found, cannot reposition tank near headset.");
+            yield break;
+        }
+
+        // Place the tank at the headset's XZ position, keeping its spawned Y (floor level)
+        Vector3 headsetPos = cam.transform.position;
+        Vector3 tankPos = playerTank.transform.position;
+        playerTank.transform.position = new Vector3(headsetPos.x, tankPos.y, headsetPos.z);
+
+        // Face the tank in the headset's forward direction (projected to horizontal)
+        Vector3 forward = cam.transform.forward;
+        forward.y = 0;
+        if (forward.sqrMagnitude > 0.001f)
+        {
+            playerTank.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+        }
+
+        Debug.Log($"[GameConfig] Moved player tank to headset position: {playerTank.transform.position}");
     }
 
     [DebugMember(Category = "Game Config")]
