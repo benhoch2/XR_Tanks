@@ -1,5 +1,7 @@
 using System.Collections;
 using Meta.XR.ImmersiveDebugger;
+using Meta.XR.ImmersiveDebugger.UserInterface;
+using Meta.XR.ImmersiveDebugger.UserInterface.Generic;
 using Meta.XR.MRUtilityKit;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -37,11 +39,47 @@ public class GameConfigManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
         SceneManager.sceneLoaded += OnSceneLoaded;
+        StartCoroutine(SubscribeToDebugPanel());
     }
 
     void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+        if (_debugInterface != null)
+        {
+            _debugInterface.OnVisibilityChangedEvent -= OnDebugPanelVisibilityChanged;
+        }
+        Time.timeScale = 1f;
+    }
+
+    private DebugInterface _debugInterface;
+
+    private IEnumerator SubscribeToDebugPanel()
+    {
+        // Wait for the Immersive Debugger panel to be created
+        DebugInterface panel = null;
+        for (int i = 0; i < 600; i++) // wait up to ~10 seconds
+        {
+            panel = FindAnyObjectByType<DebugInterface>();
+            if (panel != null) break;
+            yield return null;
+        }
+
+        if (panel == null)
+        {
+            Debug.LogWarning("[GameConfig] DebugInterface not found, cannot auto-pause.");
+            yield break;
+        }
+
+        _debugInterface = panel;
+        _debugInterface.OnVisibilityChangedEvent += OnDebugPanelVisibilityChanged;
+        Debug.Log("[GameConfig] Subscribed to Immersive Debugger panel visibility.");
+    }
+
+    private void OnDebugPanelVisibilityChanged(Controller controller)
+    {
+        Time.timeScale = controller.Visibility ? 0f : 1f;
+        Debug.Log($"[GameConfig] Debug panel {(controller.Visibility ? "opened" : "closed")}, timeScale={Time.timeScale}");
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -95,10 +133,17 @@ public class GameConfigManager : MonoBehaviour
             yield break;
         }
 
-        // Place the tank at the headset's XZ position, keeping its spawned Y (floor level)
+        // Raycast down from headset position to find the actual floor
         Vector3 headsetPos = cam.transform.position;
-        Vector3 tankPos = playerTank.transform.position;
-        playerTank.transform.position = new Vector3(headsetPos.x, tankPos.y, headsetPos.z);
+        Vector3 rayOrigin = new Vector3(headsetPos.x, headsetPos.y + 1f, headsetPos.z);
+        float floorY = playerTank.transform.position.y; // fallback
+
+        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 10f))
+        {
+            floorY = hit.point.y;
+        }
+
+        playerTank.transform.position = new Vector3(headsetPos.x, floorY, headsetPos.z);
 
         // Face the tank in the headset's forward direction (projected to horizontal)
         Vector3 forward = cam.transform.forward;
@@ -106,6 +151,14 @@ public class GameConfigManager : MonoBehaviour
         if (forward.sqrMagnitude > 0.001f)
         {
             playerTank.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+        }
+
+        // Reset Rigidbody so physics doesn't fight the new position
+        var rb = playerTank.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
         }
 
         Debug.Log($"[GameConfig] Moved player tank to headset position: {playerTank.transform.position}");
