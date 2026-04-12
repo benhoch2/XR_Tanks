@@ -13,9 +13,13 @@ public class Target : MonoBehaviour
     public int maxHitPoints = 0;
     private int currentHitPoints;
 
+    [Tooltip("Optional health bar (PowerBar prefab). Shown only for targets with maxHitPoints > 0.")]
+    [SerializeField] private PowerBar healthBar;
+
     private void Awake()
     {
         currentHitPoints = maxHitPoints;
+        UpdateHealthBar();
     }
 
     bool IsBall(GameObject obj)
@@ -52,6 +56,7 @@ public class Target : MonoBehaviour
             // Health-based path (enemies)
             currentHitPoints -= damage;
             Debug.Log($"{gameObject.name} hit for {damage} damage. HP: {currentHitPoints}/{maxHitPoints}");
+            UpdateHealthBar();
 
             if (currentHitPoints <= 0)
             {
@@ -119,4 +124,9 @@ public class Target : MonoBehaviour
 		HandleHit(other.gameObject, contactPoint);
 	}
 
+    private void UpdateHealthBar()
+    {
+        if (healthBar == null || maxHitPoints <= 0) return;
+        healthBar.power = Mathf.Clamp01((float)currentHitPoints / maxHitPoints);
+    }
 }

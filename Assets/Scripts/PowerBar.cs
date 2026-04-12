@@ -181,5 +181,16 @@ public class PowerBar : MonoBehaviour
         Vector3 fullPos = fullBar.localPosition;
         fullPos.z = newLocalZ;
         fullBar.localPosition = fullPos;
+
+        // Lerp FullBar color: green (100%) → red (0%)
+        if (fullRenderers != null)
+        {
+            Color barColor = Color.Lerp(Color.red, Color.green, Mathf.Clamp01(power));
+            for (int i = 0; i < fullRenderers.Length; i++)
+            {
+                if (fullRenderers[i] != null)
+                    fullRenderers[i].material.color = barColor;
+            }
+        }
     }
 }
