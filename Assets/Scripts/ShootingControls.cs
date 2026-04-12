@@ -10,6 +10,7 @@ public class ShootingControls : MonoBehaviour
     [SerializeField] private float minProjectileVelocity = 10f;
     [SerializeField] private float maxProjectileVelocity = 40f;
     [SerializeField] private float maxChargeTime = 2f;
+    [SerializeField] private int projectileDamage = 25;
     [SerializeField] private PowerBar powerBar; // Optional PowerBar reference
 
     private float chargeStartTime = 0f;
@@ -94,6 +95,12 @@ public class ShootingControls : MonoBehaviour
         if (projectilePrefab != null && firePoint != null)
         {
             GameObject projectile = Instantiate(projectilePrefab, firePoint.position, firePoint.rotation);
+
+            Projectile proj = projectile.GetComponent<Projectile>();
+            if (proj == null)
+                proj = projectile.AddComponent<Projectile>();
+            proj.damage = projectileDamage;
+
             Rigidbody rb = projectile.GetComponent<Rigidbody>();
             if (rb != null)
             {

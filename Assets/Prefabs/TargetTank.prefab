@@ -90,6 +90,7 @@ MonoBehaviour:
   - {fileID: 3654741155788002110, guid: ac8053bb68b7997419467a34b74fb975, type: 3}
   - {fileID: 3352391191284423565, guid: 9571e0e1b1e65834cbba759493c171d3, type: 3}
   effectDuration: 5
+  maxHitPoints: 100
 --- !u!1001 &934253385276023765
 PrefabInstance:
   m_ObjectHideFlags: 0
