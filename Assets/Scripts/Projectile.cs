@@ -29,6 +29,8 @@ public class Projectile : MonoBehaviour
 
     private void OnCollisionEnter(Collision collision)
     {
+        Debug.Log($"[Projectile] {gameObject.name} collided with '{collision.gameObject.name}' (tag={collision.gameObject.tag}, layer={LayerMask.LayerToName(collision.gameObject.layer)})");
+
         // If we hit a Target, Target.cs handles damage and destroys us.
         // For Explosive type, also spawn our own explosion effect on the Target hit.
         // For Teleport type, also teleport the shooter.

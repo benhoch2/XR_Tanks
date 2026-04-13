@@ -19,7 +19,7 @@ public class GameConfigManager : MonoBehaviour
 
     [Header("Projectile")]
     [DebugMember(Min = 1, Max = 50, Category = "Game Config")]
-    public int projectileMinSpeed = 1;
+    public int projectileMinSpeed = 5;
 
     [DebugMember(Min = 1, Max = 100, Category = "Game Config")]
     public int projectileMaxSpeed = 20;
@@ -74,19 +74,17 @@ public class GameConfigManager : MonoBehaviour
 
         _debugInterface = panel;
         _debugInterface.OnVisibilityChangedEvent += OnDebugPanelVisibilityChanged;
-        Debug.Log("[GameConfig] Subscribed to Immersive Debugger panel visibility.");
     }
 
     private void OnDebugPanelVisibilityChanged(Controller controller)
     {
         Time.timeScale = controller.Visibility ? 0f : 1f;
-        Debug.Log($"[GameConfig] Debug panel {(controller.Visibility ? "opened" : "closed")}, timeScale={Time.timeScale}");
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         FindAndApplySpawnerConfig();
-        StartCoroutine(MovePlayerTankToHeadset());
+        StartCoroutine(SpawnPlayerTankNearHeadset());
     }
 
     private void FindAndApplySpawnerConfig()
@@ -98,77 +96,121 @@ public class GameConfigManager : MonoBehaviour
             string objName = spawner.SpawnObject.name;
 
             if (objName.Contains("TargetTank"))
-            {
                 spawner.SpawnAmount = numberOfEnemies;
-                Debug.Log($"[GameConfig] Set enemy spawner ({objName}) to {numberOfEnemies}");
-            }
             else if (objName.Contains("TargetBox"))
-            {
                 spawner.SpawnAmount = numberOfCrates;
-                Debug.Log($"[GameConfig] Set crate spawner ({objName}) to {numberOfCrates}");
-            }
         }
     }
 
-    private IEnumerator MovePlayerTankToHeadset()
+    private IEnumerator SpawnPlayerTankNearHeadset()
     {
-        // Wait for MRUK to spawn the player tank (it spawns via a scene-loaded callback)
-        ShootingControls playerTank = null;
-        for (int i = 0; i < 300; i++) // wait up to ~5 seconds
+        // Wait for MRUK room to be available
+        MRUKRoom room = null;
+        for (int i = 0; i < 600; i++)
         {
-            playerTank = FindAnyObjectByType<ShootingControls>();
-            if (playerTank != null) break;
+            if (MRUK.Instance != null)
+                room = MRUK.Instance.GetCurrentRoom();
+            if (room != null) break;
             yield return null;
         }
 
-        if (playerTank == null)
+        if (room == null)
         {
-            Debug.LogWarning("[GameConfig] Player tank not found, cannot reposition near headset.");
+            Debug.LogWarning("[GameConfig] MRUK room not found, cannot spawn player tank.");
             yield break;
         }
 
+        // Position the Floor object at the MRUK floor level as a solid fallback
+        MRUKAnchor floorAnchor = room.FloorAnchor;
+        if (floorAnchor != null)
+        {
+            float floorY = floorAnchor.transform.position.y;
+            GameObject floorObj = GameObject.Find("Floor");
+            if (floorObj != null)
+                floorObj.transform.position = new Vector3(0, floorY, 0);
+        }
+
+        // Wait for Effect Mesh colliders to generate
+        for (int i = 0; i < 60; i++)
+        {
+            if (Physics.Raycast(new Vector3(0, 5f, 0), Vector3.down, 10f))
+                break;
+            yield return null;
+        }
+
+        // Find the TankSpawner and spawn 5 candidates
+        FindSpawnPositions tankSpawner = null;
+        foreach (var spawner in FindObjectsByType<FindSpawnPositions>(FindObjectsSortMode.None))
+        {
+            if (spawner.SpawnObject != null && spawner.SpawnObject.name.Contains("TankFree"))
+            {
+                tankSpawner = spawner;
+                break;
+            }
+        }
+
+        if (tankSpawner == null)
+        {
+            Debug.LogWarning("[GameConfig] TankSpawner not found.");
+            yield break;
+        }
+
+        tankSpawner.SpawnAmount = 5;
+        tankSpawner.StartSpawn(room);
+
+        // Wait for tanks to appear
+        ShootingControls[] candidates = null;
+        for (int i = 0; i < 120; i++)
+        {
+            candidates = FindObjectsByType<ShootingControls>(FindObjectsSortMode.None);
+            if (candidates.Length >= 5) break;
+            yield return null;
+        }
+
+        if (candidates == null || candidates.Length == 0)
+        {
+            Debug.LogWarning("[GameConfig] No player tanks found after StartSpawn.");
+            yield break;
+        }
+
+        // Pick the candidate closest to the headset (horizontal distance)
         Camera cam = Camera.main;
-        if (cam == null)
+        Vector3 headPos = cam != null ? cam.transform.position : Vector3.zero;
+
+        ShootingControls closest = candidates[0];
+        float bestDist = float.MaxValue;
+        foreach (var tank in candidates)
         {
-            Debug.LogWarning("[GameConfig] Main camera not found, cannot reposition tank near headset.");
-            yield break;
+            Vector3 diff = tank.transform.position - headPos;
+            diff.y = 0;
+            float dist = diff.sqrMagnitude;
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                closest = tank;
+            }
         }
 
-        // Raycast down from headset position to find the actual floor
-        Vector3 headsetPos = cam.transform.position;
-        Vector3 rayOrigin = new Vector3(headsetPos.x, headsetPos.y + 1f, headsetPos.z);
-        float floorY = playerTank.transform.position.y; // fallback
-
-        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 10f))
+        // Destroy the other candidates
+        foreach (var tank in candidates)
         {
-            floorY = hit.point.y;
+            if (tank != closest)
+                Destroy(tank.gameObject);
         }
 
-        playerTank.transform.position = new Vector3(headsetPos.x, floorY, headsetPos.z);
-
-        // Face the tank in the headset's forward direction (projected to horizontal)
-        Vector3 forward = cam.transform.forward;
-        forward.y = 0;
-        if (forward.sqrMagnitude > 0.001f)
+        // Face the tank toward the headset's forward direction
+        if (cam != null)
         {
-            playerTank.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            Vector3 forward = cam.transform.forward;
+            forward.y = 0;
+            if (forward.sqrMagnitude > 0.001f)
+                closest.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
         }
-
-        // Reset Rigidbody so physics doesn't fight the new position
-        var rb = playerTank.GetComponent<Rigidbody>();
-        if (rb != null)
-        {
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-        }
-
-        Debug.Log($"[GameConfig] Moved player tank to headset position: {playerTank.transform.position}");
     }
 
     [DebugMember(Category = "Game Config")]
     public void ReloadScene()
     {
-        Debug.Log("Reloading scene...");
         Scene active = SceneManager.GetActiveScene();
         SceneManager.LoadScene(active.name);
     }
