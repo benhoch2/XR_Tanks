@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEngine.XR;
-using UnityEngine.InputSystem; // ✅ New Input System
 
 public class TowerControllerSimple : MonoBehaviour
 {
@@ -31,25 +30,10 @@ public class TowerControllerSimple : MonoBehaviour
             .TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out rightStick);
 
 
-        // --- Keyboard fallback (new Input System) ---
         float moveInput = leftStick.y;
         float turnInput = leftStick.x;
         float rotationInput = rightStick.x;
         float tiltInput = rightStick.y;
-
-        // WASD for movement
-        if (Keyboard.current != null) {
-            if (Keyboard.current.wKey.isPressed) moveInput += 1f;
-            if (Keyboard.current.sKey.isPressed) moveInput -= 1f;
-            if (Keyboard.current.aKey.isPressed) turnInput -= 1f;
-            if (Keyboard.current.dKey.isPressed) turnInput += 1f;
-
-            // Arrows for turret control
-            if (Keyboard.current.leftArrowKey.isPressed) rotationInput -= 1f;
-            if (Keyboard.current.rightArrowKey.isPressed) rotationInput += 1f;
-            if (Keyboard.current.upArrowKey.isPressed) tiltInput += 1f;
-            if (Keyboard.current.downArrowKey.isPressed) tiltInput -= 1f;
-        }
 
         MoveTank(moveInput, turnInput);
         RotateTower(rotationInput);

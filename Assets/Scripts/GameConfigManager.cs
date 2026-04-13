@@ -28,6 +28,26 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Min = 1, Max = 10, Category = "Game Config")]
     public int powerUpDuration = 2;
 
+    [Header("Controls — Right")]
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Trigger")]
+    public string ctrlRTrigger = "Fire (hold to charge)";
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "A Button")]
+    public string ctrlA = "Cycle projectile";
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "B Button (hold 3s)")]
+    public string ctrlB = "Reset / flip tank";
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Stick X")]
+    public string ctrlRStickX = "Rotate turret";
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Stick Y")]
+    public string ctrlRStickY = "Tilt turret";
+
+    [Header("Controls — Left")]
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "Y Button")]
+    public string ctrlY = "Open / close config menu";
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "L Stick Y")]
+    public string ctrlLStickY = "Drive forward / back";
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "L Stick X")]
+    public string ctrlLStickX = "Turn left / right";
+
     void Awake()
     {
         if (Instance != null && Instance != this)

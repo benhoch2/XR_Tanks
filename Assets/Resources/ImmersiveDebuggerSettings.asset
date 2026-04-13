@@ -54,4 +54,4 @@ MonoBehaviour:
   clickButton: 8193
   toggleFollowTranslationButton: 0
   toggleFollowRotationButton: 0
-  immersiveDebuggerToggleDisplayButton: 2
+  immersiveDebuggerToggleDisplayButton: 8

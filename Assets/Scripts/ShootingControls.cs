@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;     // For Keyboard.current (New Input System)
-using UnityEngine.XR;              // For XRNode
+using UnityEngine.XR;
 
 public class ShootingControls : MonoBehaviour
 {
@@ -50,14 +49,6 @@ public class ShootingControls : MonoBehaviour
 
     void Update()
     {
-        // --- Space bar ---
-        bool spacePressed = Keyboard.current?.spaceKey.wasPressedThisFrame ?? false;
-        bool spaceReleased = Keyboard.current?.spaceKey.wasReleasedThisFrame ?? false;
-
-        // --- Q key: cycle projectile (keyboard) ---
-        bool qPressed = Keyboard.current?.qKey.wasPressedThisFrame ?? false;
-
-        // --- Oculus right hand input ---
         bool triggerPressed = false;
         bool triggerReleased = false;
         bool aButtonPressed = false;
@@ -75,13 +66,6 @@ public class ShootingControls : MonoBehaviour
 
                 triggerPressed = isPressedNow && !lastTriggerPressed;
                 triggerReleased = !isPressedNow && lastTriggerPressed;
-
-                if (triggerPressed)
-                    Debug.Log($"Oculus right trigger pressed: {triggerValue}");
-
-                if (triggerReleased)
-                    Debug.Log($"Oculus right trigger released: {triggerValue}");
-
                 lastTriggerPressed = isPressedNow;
             }
 
@@ -94,13 +78,13 @@ public class ShootingControls : MonoBehaviour
         }
 
         // Cycle projectile type
-        if (qPressed || aButtonPressed)
+        if (aButtonPressed)
         {
             CycleProjectile();
         }
 
         // Start charging
-        if (spacePressed || triggerPressed)
+        if (triggerPressed)
         {
             chargeStartTime = Time.time;
             isCharging = true;
@@ -117,7 +101,7 @@ public class ShootingControls : MonoBehaviour
         }
 
         // Fire
-        if ((spaceReleased || triggerReleased) && isCharging)
+        if (triggerReleased && isCharging)
         {
             float chargeDuration = Mathf.Clamp(Time.time - chargeStartTime, 0f, maxChargeTime);
             float t = (powerBar != null) ? Mathf.Clamp01(powerBar.power) : ((maxChargeTime > 0f) ? chargeDuration / maxChargeTime : 1f);
