@@ -16,9 +16,14 @@ public class PowerBar : MonoBehaviour
     [SerializeField]
     private Camera cameraToFace;
 
+    [Tooltip("Enable green-to-red color lerp based on power level (for health bars).")]
+    [SerializeField]
+    private bool useColorLerp = false;
+
     // cached renderers for enabling/disabling visuals
     private MeshRenderer[] emptyRenderers;
     private MeshRenderer[] fullRenderers;
+    private MaterialPropertyBlock _propBlock;
 
     // Start is called before the first frame update
     void Start()
@@ -37,8 +42,8 @@ public class PowerBar : MonoBehaviour
 #if UNITY_EDITOR
     void OnValidate()
     {
-        // update in editor when value changes
-        ApplyFacing();
+        // update in editor when value changes — skip if not fully set up
+        if (emptyBar == null || fullBar == null) return;
         ApplyPower();
     }
 #endif
@@ -131,7 +136,8 @@ public class PowerBar : MonoBehaviour
 
     private void ApplyPower()
     {
-        if (emptyBar == null || fullBar == null) return;
+        if (emptyBar == null || fullBar == null)
+            return;
 
         CacheRenderersIfNeeded();
 
@@ -183,13 +189,18 @@ public class PowerBar : MonoBehaviour
         fullBar.localPosition = fullPos;
 
         // Lerp FullBar color: green (100%) → red (0%)
-        if (fullRenderers != null)
+        if (useColorLerp && fullRenderers != null && Application.isPlaying)
         {
+            if (_propBlock == null)
+                _propBlock = new MaterialPropertyBlock();
+
             Color barColor = Color.Lerp(Color.red, Color.green, Mathf.Clamp01(power));
+            _propBlock.SetColor("_BaseColor", barColor);
+
             for (int i = 0; i < fullRenderers.Length; i++)
             {
                 if (fullRenderers[i] != null)
-                    fullRenderers[i].material.color = barColor;
+                    fullRenderers[i].SetPropertyBlock(_propBlock);
             }
         }
     }

@@ -139,6 +139,15 @@ public class ShootingControls : MonoBehaviour
             if (proj == null)
                 proj = projectile.AddComponent<Projectile>();
             proj.damage = projectileDamage;
+            proj.shooter = transform;
+
+            // Ignore collisions between projectile and the player tank
+            Collider projCol = projectile.GetComponent<Collider>();
+            if (projCol != null)
+            {
+                foreach (var tankCol in GetComponentsInChildren<Collider>())
+                    Physics.IgnoreCollision(projCol, tankCol);
+            }
 
             Rigidbody rb = projectile.GetComponent<Rigidbody>();
             if (rb != null)

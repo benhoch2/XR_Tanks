@@ -192,18 +192,13 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 137613807182305786, guid: 14d999525743c6c44a2b3f7e297b32f3,
         type: 3}
-      propertyPath: cameraToFace
-      value: 
+      propertyPath: useColorLerp
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1548537584773091562, guid: 14d999525743c6c44a2b3f7e297b32f3,
         type: 3}
       propertyPath: m_Name
       value: HealthBar
-      objectReference: {fileID: 0}
-    - target: {fileID: 2436264803838903660, guid: 14d999525743c6c44a2b3f7e297b32f3,
-        type: 3}
-      propertyPath: 'm_Materials.Array.data[0]'
-      value: 
       objectReference: {fileID: 0}
     - target: {fileID: 2746863717689098127, guid: 14d999525743c6c44a2b3f7e297b32f3,
         type: 3}

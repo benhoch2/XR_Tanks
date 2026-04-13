@@ -154,3 +154,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Projectile
   damage: 25
+  projectileType: 0
+  explosionEffectPrefab: {fileID: 1007127540951276732, guid: 3ace37360f306cb4aac03640550fa9ef,
+    type: 3}
+  explosionEffectDuration: 2
+  selfDestructTimer: 5
