@@ -33,6 +33,8 @@ public class ShootingControls : MonoBehaviour
     private bool lastTriggerPressed = false;
     private bool lastAButtonPressed = false;
 
+    private readonly List<UnityEngine.XR.InputDevice> _devices = new List<UnityEngine.XR.InputDevice>();
+
     private GameObject CurrentPrefab =>
         (projectilePrefabs != null && projectilePrefabs.Length > 0)
             ? projectilePrefabs[currentProjectileIndex]
@@ -57,12 +59,12 @@ public class ShootingControls : MonoBehaviour
         bool triggerReleased = false;
         bool aButtonPressed = false;
 
-        List<UnityEngine.XR.InputDevice> devices = new List<UnityEngine.XR.InputDevice>();
-        UnityEngine.XR.InputDevices.GetDevicesAtXRNode(XRNode.RightHand, devices);
+        _devices.Clear();
+        UnityEngine.XR.InputDevices.GetDevicesAtXRNode(XRNode.RightHand, _devices);
 
-        if (devices.Count > 0)
+        if (_devices.Count > 0)
         {
-            var rightHand = devices[0];
+            var rightHand = _devices[0];
 
             if (rightHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.trigger, out float triggerValue))
             {

@@ -22,25 +22,12 @@ public class Target : MonoBehaviour
         UpdateHealthBar();
     }
 
-    bool IsBall(GameObject obj)
-	{
-		if (obj == null) return false;
-		// Prefer tag check (set the Ball object's tag to "Ball" if possible)
-		if (obj.CompareTag("Ball")) return true;
-		// Fallback to name check in case tag isn't set
-		string n = obj.name ?? "";
-		return n == "Ball" || n.Contains("Ball");
-	}
-
     private void HandleHit(GameObject hitObject, Vector3 hitPoint)
     {
-        if (IsBall(hitObject))
+        Projectile proj = hitObject.GetComponent<Projectile>();
+        if (proj != null)
         {
-            // Read damage from Projectile component; default to instant kill if missing
-            int damage = 0;
-            Projectile proj = hitObject.GetComponent<Projectile>();
-            if (proj != null)
-                damage = proj.damage;
+            int damage = proj.damage;
 
             // Always destroy the projectile
             Destroy(hitObject);
