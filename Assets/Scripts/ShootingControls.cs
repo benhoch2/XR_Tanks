@@ -42,7 +42,11 @@ public class ShootingControls : MonoBehaviour
     {
         var config = GameConfigManager.Instance;
         if (config != null)
+        {
             maxChargeTime = config.powerUpDuration;
+            minProjectileVelocity = config.projectileMinSpeed;
+            maxProjectileVelocity = config.projectileMaxSpeed;
+        }
 
         if (powerBar != null) powerBar.power = 0f;
     }
