@@ -1,57 +1,41 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.XR;
+using UnityEngine.InputSystem;
 
 public class TankFlip : MonoBehaviour
 {
-    // How long both X and Y must be held to trigger (seconds)
+    // How long B must be held to trigger (seconds)
     public float holdDuration = 3f;
 
     // Upward velocity applied after reset
     public float upVelocity = 2f;
 
-    private InputDevice rightDevice;
+    private InputAction flipAction;
+
     private float holdTimer = 0f;
     private bool triggered = false;
     private Rigidbody rb;
 
-    // Start is called before the first frame update
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        TryInitializeRightDevice();
     }
 
-    void TryInitializeRightDevice()
+    void OnEnable()
     {
-        var devices = new List<InputDevice>();
-        InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Right | InputDeviceCharacteristics.Controller, devices);
-        if (devices.Count > 0)
-        {
-            rightDevice = devices[0];
-        }
+        flipAction = new InputAction("FlipTank", InputActionType.Button, "<XRController>{RightHand}/secondaryButton");
+        flipAction.Enable();
     }
 
-    // Update is called once per frame
+    void OnDisable()
+    {
+        flipAction?.Disable();
+        flipAction?.Dispose();
+        flipAction = null;
+    }
+
     void Update()
     {
-        // ensure we have a valid device reference
-        if (!rightDevice.isValid)
-        {
-            TryInitializeRightDevice();
-        }
-
-        if (!rightDevice.isValid)
-        {
-            // no right controller available this frame
-            return;
-        }
-
-        bool bPressed = false;
-
-        // B button is typically secondaryButton on the right-hand controller
-        rightDevice.TryGetFeatureValue(CommonUsages.secondaryButton, out bPressed);
+        bool bPressed = flipAction?.IsPressed() ?? false;
 
         if (bPressed)
         {

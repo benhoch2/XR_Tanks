@@ -1,6 +1,5 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.XR;
+using UnityEngine.InputSystem;
 
 public class ShootingControls : MonoBehaviour
 {
@@ -24,6 +23,9 @@ public class ShootingControls : MonoBehaviour
     [Tooltip("Height offset above the tank for the preview.")]
     [SerializeField] private float previewHeightOffset = 0.15f;
 
+    private InputAction fireAction;
+    private InputAction cycleProjectileAction;
+
     private int currentProjectileIndex = 0;
     private GameObject currentPreview;
 
@@ -32,8 +34,6 @@ public class ShootingControls : MonoBehaviour
 
     private bool lastTriggerPressed = false;
     private bool lastAButtonPressed = false;
-
-    private readonly List<UnityEngine.XR.InputDevice> _devices = new List<UnityEngine.XR.InputDevice>();
 
     private GameObject CurrentPrefab =>
         (projectilePrefabs != null && projectilePrefabs.Length > 0)
@@ -53,35 +53,39 @@ public class ShootingControls : MonoBehaviour
         if (powerBar != null) powerBar.power = 0f;
     }
 
+    void OnEnable()
+    {
+        fireAction = new InputAction("Fire", InputActionType.Value, "<XRController>{RightHand}/trigger");
+        cycleProjectileAction = new InputAction("CycleProjectile", InputActionType.Button, "<XRController>{RightHand}/primaryButton");
+        fireAction.Enable();
+        cycleProjectileAction.Enable();
+    }
+
+    void OnDisable()
+    {
+        fireAction?.Disable();
+        cycleProjectileAction?.Disable();
+        fireAction?.Dispose();
+        cycleProjectileAction?.Dispose();
+        fireAction = null;
+        cycleProjectileAction = null;
+    }
+
     void Update()
     {
         bool triggerPressed = false;
         bool triggerReleased = false;
         bool aButtonPressed = false;
 
-        _devices.Clear();
-        UnityEngine.XR.InputDevices.GetDevicesAtXRNode(XRNode.RightHand, _devices);
+        float triggerValue = fireAction?.ReadValue<float>() ?? 0f;
+        bool isPressedNow = triggerValue > 0.1f;
+        triggerPressed = isPressedNow && !lastTriggerPressed;
+        triggerReleased = !isPressedNow && lastTriggerPressed;
+        lastTriggerPressed = isPressedNow;
 
-        if (_devices.Count > 0)
-        {
-            var rightHand = _devices[0];
-
-            if (rightHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.trigger, out float triggerValue))
-            {
-                bool isPressedNow = triggerValue > 0.1f;
-
-                triggerPressed = isPressedNow && !lastTriggerPressed;
-                triggerReleased = !isPressedNow && lastTriggerPressed;
-                lastTriggerPressed = isPressedNow;
-            }
-
-            // A button (cycle projectile)
-            if (rightHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool aValue))
-            {
-                aButtonPressed = aValue && !lastAButtonPressed;
-                lastAButtonPressed = aValue;
-            }
-        }
+        bool aValue = cycleProjectileAction?.WasPerformedThisFrame() ?? false;
+        aButtonPressed = aValue && !lastAButtonPressed;
+        lastAButtonPressed = aValue;
 
         // Cycle projectile type
         if (aButtonPressed)

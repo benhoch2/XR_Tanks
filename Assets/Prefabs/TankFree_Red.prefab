@@ -439,6 +439,10 @@ MonoBehaviour:
   minTilt: -45
   maxTilt: 30
   moveSpeed: 0.5
+  moveAction: {fileID: -1843044792980110101, guid: 2c5dcd725bfd1de4298cde56f77155fc,
+    type: 3}
+  aimAction: {fileID: -2217501765177776513, guid: 2c5dcd725bfd1de4298cde56f77155fc,
+    type: 3}
 --- !u!114 &5513113246312555234
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -465,6 +469,10 @@ MonoBehaviour:
   previewDuration: 3
   previewScale: 30
   previewHeightOffset: 0.1
+  fireAction: {fileID: -995949957466207795, guid: 2c5dcd725bfd1de4298cde56f77155fc,
+    type: 3}
+  cycleProjectileAction: {fileID: -7710200051144081176, guid: 2c5dcd725bfd1de4298cde56f77155fc,
+    type: 3}
 --- !u!65 &5196274824509777162
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -527,6 +535,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   holdDuration: 1
   upVelocity: 1.5
+  flipAction: {fileID: 1689249690736962462, guid: 2c5dcd725bfd1de4298cde56f77155fc,
+    type: 3}
 --- !u!1 &3745786531496338126
 GameObject:
   m_ObjectHideFlags: 0

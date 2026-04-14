@@ -51,5 +51,8 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "XR_Tanks.slnx"
+    "dotnet.defaultSolution": "XR_Tanks.slnx",
+    "chat.tools.terminal.autoApprove": {
+        "adb": true
+    }
 }

@@ -1,5 +1,5 @@
 using UnityEngine;
-using UnityEngine.XR;
+using UnityEngine.InputSystem;
 
 public class TowerController : MonoBehaviour
 {
@@ -13,20 +13,32 @@ public class TowerController : MonoBehaviour
     [Header("Tank Movement Settings")]
     public float moveSpeed = 5f;
 
+    private InputAction moveAction;
+    private InputAction aimAction;
     private float currentTilt = 0f;
+
+    void OnEnable()
+    {
+        moveAction = new InputAction("Move", InputActionType.Value, "<XRController>{LeftHand}/thumbstick");
+        aimAction = new InputAction("Aim", InputActionType.Value, "<XRController>{RightHand}/thumbstick");
+        moveAction.Enable();
+        aimAction.Enable();
+    }
+
+    void OnDisable()
+    {
+        moveAction?.Disable();
+        aimAction?.Disable();
+        moveAction?.Dispose();
+        aimAction?.Dispose();
+        moveAction = null;
+        aimAction = null;
+    }
 
     void Update()
     {
-        // --- VR joystick input ---
-        Vector2 leftStick = Vector2.zero;
-        Vector2 rightStick = Vector2.zero;
-
-        InputDevices.GetDeviceAtXRNode(XRNode.LeftHand)
-            .TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out leftStick);
-
-        InputDevices.GetDeviceAtXRNode(XRNode.RightHand)
-            .TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out rightStick);
-
+        Vector2 leftStick = moveAction?.ReadValue<Vector2>() ?? Vector2.zero;
+        Vector2 rightStick = aimAction?.ReadValue<Vector2>() ?? Vector2.zero;
 
         float moveInput = leftStick.y;
         float turnInput = leftStick.x;
