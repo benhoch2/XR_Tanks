@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.XR;
 
-public class TowerControllerSimple : MonoBehaviour
+public class TowerController : MonoBehaviour
 {
     [Header("Tower Rotation Settings")]
     [SerializeField] GameObject towerBase;
@@ -21,8 +21,6 @@ public class TowerControllerSimple : MonoBehaviour
         Vector2 leftStick = Vector2.zero;
         Vector2 rightStick = Vector2.zero;
 
-
-        // After (fully qualified)
         InputDevices.GetDeviceAtXRNode(XRNode.LeftHand)
             .TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out leftStick);
 
