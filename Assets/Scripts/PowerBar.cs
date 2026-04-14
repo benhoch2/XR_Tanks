@@ -115,7 +115,7 @@ public class PowerBar : MonoBehaviour
         }
 
         // last resort: find any Camera in scene
-        Camera any = GameObject.FindObjectOfType<Camera>();
+        Camera any = FindAnyObjectByType<Camera>();
         if (any != null)
         {
             cameraToFace = any;
