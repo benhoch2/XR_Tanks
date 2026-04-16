@@ -146,6 +146,8 @@ public class ShootingControls : MonoBehaviour
             Rigidbody rb = projectile.GetComponent<Rigidbody>();
             if (rb != null)
             {
+                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+                rb.interpolation = RigidbodyInterpolation.Interpolate;
                 rb.linearVelocity = firePoint.forward * velocity;
             }
         }

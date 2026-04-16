@@ -136,18 +136,18 @@ public class GameConfigManager : MonoBehaviour
 
         if (room == null)
         {
-            Debug.LogWarning("[GameConfig] MRUK room not found, cannot spawn player tank.");
+            Debug.LogWarning("[GameConfig] MRUK room not found; using fallback Floor collider and editor tank spawn.");
+            ConfigureFallbackFloor(true, null);
+            SpawnPlayerTankFallback();
             yield break;
         }
 
-        // Position the Floor object at the MRUK floor level as a solid fallback
+        // Align the fallback scene Floor to the MRUK floor level so gameplay uses a stable floor surface.
         MRUKAnchor floorAnchor = room.FloorAnchor;
         if (floorAnchor != null)
         {
             float floorY = floorAnchor.transform.position.y;
-            GameObject floorObj = GameObject.Find("Floor");
-            if (floorObj != null)
-                floorObj.transform.position = new Vector3(0, floorY, 0);
+            ConfigureFallbackFloor(true, floorY);
         }
 
         // Wait for Effect Mesh colliders to generate
@@ -225,6 +225,80 @@ public class GameConfigManager : MonoBehaviour
             forward.y = 0;
             if (forward.sqrMagnitude > 0.001f)
                 closest.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+        }
+
+        // Ensure the bottom of the tank sits slightly above the MRUK floor
+        if (floorAnchor != null)
+        {
+            float floorY = floorAnchor.transform.position.y;
+            Collider tankCollider = closest.GetComponentInChildren<Collider>();
+            if (tankCollider != null)
+            {
+                Bounds bounds = tankCollider.bounds;
+                float clearance = 0.01f;
+                float offsetY = (floorY + clearance) - bounds.min.y;
+
+                if (Mathf.Abs(offsetY) > 0.001f)
+                {
+                    closest.transform.position += Vector3.up * offsetY;
+                }
+            }
+        }
+    }
+
+    private void ConfigureFallbackFloor(bool enableCollider, float? floorY)
+    {
+        GameObject floorObj = GameObject.Find("Floor");
+        if (floorObj == null) return;
+
+        if (floorY.HasValue)
+        {
+            Vector3 pos = floorObj.transform.position;
+            pos.y = floorY.Value;
+            floorObj.transform.position = pos;
+        }
+
+        Collider floorCollider = floorObj.GetComponent<Collider>();
+        if (floorCollider != null)
+            floorCollider.enabled = enableCollider;
+    }
+
+    private void SpawnPlayerTankFallback()
+    {
+        FindSpawnPositions tankSpawner = null;
+        foreach (var spawner in FindObjectsByType<FindSpawnPositions>(FindObjectsSortMode.None))
+        {
+            if (spawner.SpawnObject != null && spawner.SpawnObject.name.Contains("TankFree"))
+            {
+                tankSpawner = spawner;
+                break;
+            }
+        }
+
+        if (tankSpawner == null || tankSpawner.SpawnObject == null)
+        {
+            Debug.LogWarning("[GameConfig] TankSpawner not found for fallback spawn.");
+            return;
+        }
+
+        Camera cam = Camera.main;
+        Vector3 spawnPos = cam != null ? cam.transform.position + cam.transform.forward * 2f : new Vector3(0f, 0f, 2f);
+
+        GameObject floorObj = GameObject.Find("Floor");
+        if (floorObj != null)
+            spawnPos.y = floorObj.transform.position.y + 0.01f;
+
+        Vector3 forward = cam != null ? cam.transform.forward : Vector3.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.001f)
+            forward = Vector3.forward;
+
+        GameObject tank = Instantiate(tankSpawner.SpawnObject, spawnPos, Quaternion.LookRotation(forward, Vector3.up));
+        Collider tankCollider = tank.GetComponentInChildren<Collider>();
+        if (floorObj != null && tankCollider != null)
+        {
+            float offsetY = (floorObj.transform.position.y + 0.01f) - tankCollider.bounds.min.y;
+            tank.transform.position += Vector3.up * offsetY;
         }
     }
 

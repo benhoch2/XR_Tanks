@@ -25,11 +25,42 @@ public class Projectile : MonoBehaviour
 
     [HideInInspector] public Transform shooter;
 
+    [Tooltip("Explosive shots ignore floor-like collisions only when they happen clearly above the gameplay floor.")]
+    public float elevatedFloorIgnoreThreshold = 0.05f;
+
     private bool timerStarted = false;
 
     private void OnCollisionEnter(Collision collision)
     {
-        Debug.Log($"[Projectile] {gameObject.name} collided with '{collision.gameObject.name}' (tag={collision.gameObject.tag}, layer={LayerMask.LayerToName(collision.gameObject.layer)})");
+        Vector3 contactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : transform.position;
+        string hitName = collision.gameObject.name;
+
+        // Ignore only floor-like collisions that happen significantly above the gameplay floor.
+        bool isFloorLikeHit =
+            hitName == "FLOOR" ||
+            hitName == "Floor" ||
+            hitName.Contains("FLOOR_EffectMesh") ||
+            hitName.Contains("GLOBAL_MESH");
+
+        if (projectileType == ProjectileType.Explosive && isFloorLikeHit)
+        {
+            GameObject gameplayFloor = GameObject.Find("Floor");
+            if (gameplayFloor != null)
+            {
+                float floorY = gameplayFloor.transform.position.y;
+                float deltaY = contactPoint.y - floorY;
+
+                if (deltaY > elevatedFloorIgnoreThreshold)
+                {
+                    Collider projectileCollider = GetComponent<Collider>();
+                    if (projectileCollider != null)
+                        Physics.IgnoreCollision(projectileCollider, collision.collider);
+
+                    return;
+                }
+            }
+        }
+
 
         // If we hit a Target, Target.cs handles damage and destroys us.
         // For Explosive type, also spawn our own explosion effect on the Target hit.
@@ -38,7 +69,7 @@ public class Projectile : MonoBehaviour
         if (target != null)
         {
             if (projectileType == ProjectileType.Explosive)
-                SpawnExplosionEffect();
+                SpawnExplosionEffect(contactPoint);
             if (projectileType == ProjectileType.Teleport)
                 TeleportShooter(collision);
             return;
@@ -57,8 +88,8 @@ public class Projectile : MonoBehaviour
                 break;
 
             case ProjectileType.Explosive:
-                // Explode immediately on any surface
-                Explode();
+                // Explode immediately on any surface, at the actual contact point
+                Explode(contactPoint);
                 break;
 
             case ProjectileType.Teleport:
@@ -85,15 +116,26 @@ public class Projectile : MonoBehaviour
 
     private void Explode()
     {
-        SpawnExplosionEffect();
+        SpawnExplosionEffect(transform.position);
+        Destroy(gameObject);
+    }
+
+    private void Explode(Vector3 position)
+    {
+        SpawnExplosionEffect(position);
         Destroy(gameObject);
     }
 
     private void SpawnExplosionEffect()
     {
+        SpawnExplosionEffect(transform.position);
+    }
+
+    private void SpawnExplosionEffect(Vector3 position)
+    {
         if (explosionEffectPrefab != null)
         {
-            GameObject effect = Instantiate(explosionEffectPrefab, transform.position, Quaternion.identity);
+            GameObject effect = Instantiate(explosionEffectPrefab, position, Quaternion.identity);
             Destroy(effect, explosionEffectDuration);
         }
     }
