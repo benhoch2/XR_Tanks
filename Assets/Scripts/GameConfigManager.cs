@@ -1,9 +1,11 @@
 using System.Collections;
+using System.Collections.Generic;
 using Meta.XR.ImmersiveDebugger;
 using Meta.XR.ImmersiveDebugger.UserInterface;
 using Meta.XR.ImmersiveDebugger.UserInterface.Generic;
 using Meta.XR.MRUtilityKit;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 
 public class GameConfigManager : MonoBehaviour
@@ -27,6 +29,16 @@ public class GameConfigManager : MonoBehaviour
     [Header("Power")]
     [DebugMember(Min = 1, Max = 10, Category = "Game Config")]
     public int powerUpDuration = 2;
+
+    [Header("Enemy Movement")]
+    [DebugMember(Min = 0.1f, Max = 3f, Category = "Game Config")]
+    public float enemyMoveSpeed = 0.5f;
+
+    [DebugMember(Min = 0.5f, Max = 10f, Category = "Game Config")]
+    public float enemyChaseRange = 4f;
+
+    [DebugMember(Min = 0.2f, Max = 3f, Category = "Game Config")]
+    public float enemyStopRange = 1.25f;
 
     [Header("Controls — Right")]
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Trigger")]
@@ -70,9 +82,12 @@ public class GameConfigManager : MonoBehaviour
             _debugInterface.OnVisibilityChangedEvent -= OnDebugPanelVisibilityChanged;
         }
         Time.timeScale = 1f;
+        if (_navMeshDataInstance.valid)
+            _navMeshDataInstance.Remove();
     }
 
     private DebugInterface _debugInterface;
+    private NavMeshDataInstance _navMeshDataInstance;
 
     private IEnumerator SubscribeToDebugPanel()
     {
@@ -139,15 +154,19 @@ public class GameConfigManager : MonoBehaviour
             Debug.LogWarning("[GameConfig] MRUK room not found; using fallback Floor collider and editor tank spawn.");
             ConfigureFallbackFloor(true, null);
             SpawnPlayerTankFallback();
+            BuildRuntimeNavMesh(null);
+            StartCoroutine(ConfigureEnemyTankMovementWhenReady());
             yield break;
         }
 
-        // Align the fallback scene Floor to the MRUK floor level so gameplay uses a stable floor surface.
+        // Align the fallback scene Floor visually to the MRUK floor, but disable it during MRUK-based spawning
+        // so the large plane does not affect spawn selection or room-bounded navigation.
         MRUKAnchor floorAnchor = room.FloorAnchor;
+        float? gameplayFloorY = null;
         if (floorAnchor != null)
         {
-            float floorY = floorAnchor.transform.position.y;
-            ConfigureFallbackFloor(true, floorY);
+            gameplayFloorY = floorAnchor.transform.position.y;
+            ConfigureFallbackFloor(false, gameplayFloorY);
         }
 
         // Wait for Effect Mesh colliders to generate
@@ -157,6 +176,9 @@ public class GameConfigManager : MonoBehaviour
                 break;
             yield return null;
         }
+
+        BuildRuntimeNavMesh(room.transform);
+        StartCoroutine(ConfigureEnemyTankMovementWhenReady());
 
         // Find the TankSpawner and spawn 5 candidates
         FindSpawnPositions tankSpawner = null;
@@ -177,6 +199,10 @@ public class GameConfigManager : MonoBehaviour
 
         tankSpawner.SpawnAmount = 5;
         tankSpawner.StartSpawn(room);
+
+        // Re-enable the stable gameplay floor immediately after spawn placement.
+        if (gameplayFloorY.HasValue)
+            ConfigureFallbackFloor(true, gameplayFloorY);
 
         // Wait for tanks to appear
         ShootingControls[] candidates = null;
@@ -244,6 +270,7 @@ public class GameConfigManager : MonoBehaviour
                 }
             }
         }
+
     }
 
     private void ConfigureFallbackFloor(bool enableCollider, float? floorY)
@@ -261,6 +288,149 @@ public class GameConfigManager : MonoBehaviour
         Collider floorCollider = floorObj.GetComponent<Collider>();
         if (floorCollider != null)
             floorCollider.enabled = enableCollider;
+    }
+
+    private void BuildRuntimeNavMesh(Transform sourceRoot)
+    {
+        List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
+        NavMeshBuilder.CollectSources(sourceRoot, LayerMask.GetMask("Default"), NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
+
+        Debug.Log($"[NavMesh] CollectSources root={(sourceRoot != null ? sourceRoot.name : "<scene>")} count={sources.Count}");
+        if (sources.Count == 0)
+        {
+            Debug.LogWarning("[NavMesh] No navmesh sources were collected.");
+            return;
+        }
+
+        Bounds bounds = new Bounds(Vector3.zero, new Vector3(20f, 10f, 20f));
+        bool hasBounds = false;
+
+        IEnumerable<Collider> colliders = sourceRoot != null
+            ? sourceRoot.GetComponentsInChildren<Collider>()
+            : FindObjectsByType<Collider>(FindObjectsSortMode.None);
+
+        foreach (var col in colliders)
+        {
+            if (!col.enabled || col.isTrigger)
+                continue;
+
+            if (!hasBounds)
+            {
+                bounds = col.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(col.bounds);
+            }
+        }
+        bounds.Expand(new Vector3(1f, 1f, 1f));
+        Debug.Log($"[NavMesh] Build bounds center={bounds.center} size={bounds.size}");
+
+        if (_navMeshDataInstance.valid)
+            _navMeshDataInstance.Remove();
+
+        NavMeshBuildSettings settings = NavMesh.GetSettingsByIndex(0);
+        settings.agentRadius = 0.12f;
+        settings.agentHeight = 0.25f;
+        settings.agentClimb = 0.2f;
+        settings.agentSlope = 60f;
+        settings.overrideVoxelSize = true;
+        settings.voxelSize = 0.03f;
+        settings.overrideTileSize = true;
+        settings.tileSize = 64;
+        Debug.Log($"[NavMesh] Using agentTypeID={settings.agentTypeID} radius={settings.agentRadius} height={settings.agentHeight} slope={settings.agentSlope}");
+
+        NavMeshData data = NavMeshBuilder.BuildNavMeshData(settings, sources, bounds, Vector3.zero, Quaternion.identity);
+        if (data != null)
+        {
+            _navMeshDataInstance = NavMesh.AddNavMeshData(data);
+            Debug.Log($"[NavMesh] NavMesh data added. valid={_navMeshDataInstance.valid}");
+        }
+        else
+        {
+            Debug.LogWarning("[NavMesh] BuildNavMeshData returned null.");
+        }
+    }
+
+    private IEnumerator ConfigureEnemyTankMovementWhenReady()
+    {
+        for (int i = 0; i < 180; i++)
+        {
+            bool foundEnemy = false;
+            foreach (var target in FindObjectsByType<Target>(FindObjectsSortMode.None))
+            {
+                if (target != null && target.maxHitPoints > 0)
+                {
+                    foundEnemy = true;
+                    break;
+                }
+            }
+
+            if (foundEnemy)
+                break;
+
+            yield return null;
+        }
+
+        foreach (var target in FindObjectsByType<Target>(FindObjectsSortMode.None))
+        {
+            if (target == null || target.maxHitPoints <= 0)
+                continue;
+
+            Rotator rotator = target.GetComponent<Rotator>();
+            if (rotator != null)
+                rotator.enabled = false;
+
+            bool foundNavPosition = NavMesh.SamplePosition(target.transform.position, out NavMeshHit hit, 6f, NavMesh.AllAreas);
+
+            if (!foundNavPosition)
+            {
+                GameObject gameplayFloor = GameObject.Find("Floor");
+                if (gameplayFloor != null)
+                {
+                    Vector3 floorProbe = target.transform.position;
+                    floorProbe.y = gameplayFloor.transform.position.y + 0.05f;
+                    foundNavPosition = NavMesh.SamplePosition(floorProbe, out hit, 6f, NavMesh.AllAreas);
+                }
+            }
+
+            if (!foundNavPosition && Camera.main != null)
+                foundNavPosition = NavMesh.SamplePosition(Camera.main.transform.position, out hit, 8f, NavMesh.AllAreas);
+
+            if (!foundNavPosition)
+            {
+                Debug.LogWarning($"[NavMesh] Could not find navmesh position near enemy '{target.name}' at {target.transform.position}");
+                continue;
+            }
+
+            target.transform.position = hit.position;
+
+            NavMeshAgent agent = target.GetComponent<NavMeshAgent>();
+            if (agent == null)
+                agent = target.gameObject.AddComponent<NavMeshAgent>();
+
+            agent.speed = enemyMoveSpeed;
+            agent.angularSpeed = 180f;
+            agent.acceleration = 2f;
+            agent.stoppingDistance = enemyStopRange;
+            agent.radius = 0.12f;
+            agent.height = 0.25f;
+            agent.baseOffset = 0.05f;
+            agent.autoBraking = true;
+            agent.autoTraverseOffMeshLink = false;
+            agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
+            agent.Warp(hit.position);
+            Debug.Log($"[NavMesh] Warped enemy '{target.name}' to {hit.position}");
+
+            EnemyTankAI ai = target.GetComponent<EnemyTankAI>();
+            if (ai == null)
+                ai = target.gameObject.AddComponent<EnemyTankAI>();
+
+            ai.chaseRange = enemyChaseRange;
+            ai.stopRange = enemyStopRange;
+            ai.moveSpeed = enemyMoveSpeed;
+        }
     }
 
     private void SpawnPlayerTankFallback()
