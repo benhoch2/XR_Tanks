@@ -40,8 +40,26 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Min = 0.2f, Max = 3f, Category = "Game Config")]
     public float enemyStopRange = 1.25f;
 
+    [DebugMember(Min = 0, Max = 1, Category = "Game Config")]
+    public int enemyAIMode = 1;
+
+    [DebugMember(Tweakable = false, Category = "Game Config", DisplayName = "AI Modes")]
+    public string enemyAIModeHelp = "0 = Chase/Wander, 1 = Patrol/Scan";
+
+    [DebugMember(Min = 10f, Max = 90f, Category = "Game Config")]
+    public float enemyScanAngle = 45f;
+
+    [DebugMember(Min = 5f, Max = 90f, Category = "Game Config")]
+    public float enemyScanSpeed = 25f;
+
+    [DebugMember(Min = 1, Max = 6, Category = "Game Config")]
+    public int enemyScanRepetitions = 1;
+
+    [DebugMember(Min = 0.1f, Max = 1.5f, Category = "Game Config")]
+    public float enemyObstacleCheckDistance = 0.25f;
+
     [DebugMember(Category = "Game Config")]
-    public bool pauseWhenConfigMenuOpen = false;
+    public bool pauseWhenConfigMenuOpen = true;
 
     [Header("Controls — Right")]
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Trigger")]
@@ -133,7 +151,24 @@ public class GameConfigManager : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        ResetSceneStartupState();
+        StartCoroutine(SubscribeToDebugPanel());
         BeginSceneStartup();
+    }
+
+    private void ResetSceneStartupState()
+    {
+        _sceneStartupTriggered = false;
+        Time.timeScale = 1f;
+
+        if (_navMeshDataInstance.valid)
+            _navMeshDataInstance.Remove();
+
+        if (_debugInterface != null)
+        {
+            _debugInterface.OnVisibilityChangedEvent -= OnDebugPanelVisibilityChanged;
+            _debugInterface = null;
+        }
     }
 
     private void BeginSceneStartup()
@@ -464,6 +499,12 @@ public class GameConfigManager : MonoBehaviour
             ai.chaseRange = enemyChaseRange;
             ai.stopRange = enemyStopRange;
             ai.moveSpeed = enemyMoveSpeed;
+            ai.behaviorMode = enemyAIMode == 1 ? EnemyTankAI.BehaviorMode.PatrolScan : EnemyTankAI.BehaviorMode.ChaseWander;
+            ai.turretScanAngle = enemyScanAngle;
+            ai.turretScanSpeed = enemyScanSpeed;
+            ai.turretScanRepeats = enemyScanRepetitions;
+            ai.obstacleCheckDistance = enemyObstacleCheckDistance;
+            ai.ResetBehaviorState();
 
             // Wire wheel animations to the moving enemy root so the wheels turn with movement.
             foreach (var wheel in target.GetComponentsInChildren<WheelRotation>(true))
@@ -516,6 +557,7 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Game Config")]
     public void ReloadScene()
     {
+        ResetSceneStartupState();
         Scene active = SceneManager.GetActiveScene();
         SceneManager.LoadScene(active.name);
     }
