@@ -8,6 +8,9 @@ public class EnemyTankAI : MonoBehaviour
     [HideInInspector] public float chaseRange = 4f;
     [HideInInspector] public float stopRange = 1.25f;
 
+    [SerializeField] private float rotationSpeed = 100f;
+    [SerializeField] private float reverseSpeedFactor = 0.6f;
+    [SerializeField] private float turnMoveReduction = 0.5f;
     [SerializeField] private float wanderRadius = 1.5f;
     [SerializeField] private float repathInterval = 1.5f;
 
@@ -20,6 +23,12 @@ public class EnemyTankAI : MonoBehaviour
     {
         _agent = GetComponent<NavMeshAgent>();
         _homePosition = transform.position;
+
+        if (_agent != null)
+        {
+            _agent.updatePosition = true;
+            _agent.updateRotation = false;
+        }
     }
 
     private void Update()
@@ -37,6 +46,7 @@ public class EnemyTankAI : MonoBehaviour
                 _player = playerControls.transform;
         }
 
+        bool hasTarget = false;
         if (_player != null)
         {
             Vector3 toPlayer = _player.position - transform.position;
@@ -45,6 +55,7 @@ public class EnemyTankAI : MonoBehaviour
 
             if (distanceToPlayer <= chaseRange)
             {
+                hasTarget = true;
                 if (distanceToPlayer > stopRange)
                 {
                     _agent.SetDestination(_player.position);
@@ -52,16 +63,57 @@ public class EnemyTankAI : MonoBehaviour
                 else
                 {
                     _agent.ResetPath();
+                    RotateToward(toPlayer.normalized);
                 }
-                return;
             }
         }
 
-        if (Time.time >= _nextRepathTime && (!_agent.hasPath || _agent.remainingDistance <= _agent.stoppingDistance + 0.1f))
+        if (!hasTarget && Time.time >= _nextRepathTime && (!_agent.hasPath || _agent.remainingDistance <= _agent.stoppingDistance + 0.1f))
         {
             SetRandomDestination();
             _nextRepathTime = Time.time + repathInterval;
         }
+
+        DriveLikeTank();
+    }
+
+    private void DriveLikeTank()
+    {
+        if (!_agent.hasPath)
+            return;
+
+        Vector3 desiredDirection = _agent.steeringTarget - transform.position;
+        desiredDirection.y = 0f;
+
+        if (desiredDirection.sqrMagnitude < 0.001f)
+            return;
+
+        Vector3 localDirection = transform.InverseTransformDirection(desiredDirection.normalized);
+        float turnInput = Mathf.Clamp(localDirection.x, -1f, 1f);
+        float moveInput = Mathf.Clamp(localDirection.z, -1f, 1f);
+
+        if (Mathf.Abs(turnInput) > 0.01f)
+            transform.Rotate(Vector3.up, turnInput * rotationSpeed * Time.deltaTime);
+
+        if (Mathf.Abs(moveInput) > 0.01f)
+        {
+            float speedFactor = moveInput < 0f ? reverseSpeedFactor : 1f;
+            speedFactor *= Mathf.Lerp(1f, turnMoveReduction, Mathf.Abs(turnInput));
+
+            Vector3 step = transform.forward * moveInput * moveSpeed * speedFactor * Time.deltaTime;
+            _agent.Move(step);
+        }
+    }
+
+    private void RotateToward(Vector3 worldDirection)
+    {
+        if (worldDirection.sqrMagnitude < 0.001f)
+            return;
+
+        Vector3 localDirection = transform.InverseTransformDirection(worldDirection.normalized);
+        float turnInput = Mathf.Clamp(localDirection.x, -1f, 1f);
+        if (Mathf.Abs(turnInput) > 0.01f)
+            transform.Rotate(Vector3.up, turnInput * rotationSpeed * Time.deltaTime);
     }
 
     private void SetRandomDestination()

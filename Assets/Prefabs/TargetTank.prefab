@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 8359984376140570918}
   - component: {fileID: -3220950573109502217}
   - component: {fileID: -7609455599935997906}
+  - component: {fileID: 5249001239229336157}
   m_Layer: 0
   m_Name: TargetTank
   m_TagString: Untagged
@@ -93,6 +94,28 @@ MonoBehaviour:
   effectDuration: 5
   maxHitPoints: 100
   healthBar: {fileID: 1713262150043218795}
+--- !u!195 &5249001239229336157
+NavMeshAgent:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1328997221997902240}
+  m_Enabled: 1
+  m_AgentTypeID: 0
+  m_Radius: 0.05
+  m_Speed: 3.5
+  m_Acceleration: 8
+  avoidancePriority: 50
+  m_AngularSpeed: 120
+  m_StoppingDistance: 0
+  m_AutoTraverseOffMeshLink: 1
+  m_AutoBraking: 1
+  m_AutoRepath: 1
+  m_Height: 0.1
+  m_BaseOffset: 0.05
+  m_WalkableMask: 4294967295
+  m_ObstacleAvoidanceType: 3
 --- !u!1001 &934253385276023765
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -129,7 +152,7 @@ PrefabInstance:
     - target: {fileID: 1676515232765691307, guid: ae98f3b2f9fb19e4dba07742ad8d6f4d,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: -0.02
       objectReference: {fileID: 0}
     - target: {fileID: 1676515232765691307, guid: ae98f3b2f9fb19e4dba07742ad8d6f4d,
         type: 3}
@@ -223,7 +246,7 @@ PrefabInstance:
     - target: {fileID: 2746863717689098127, guid: 14d999525743c6c44a2b3f7e297b32f3,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.1087
+      value: 0.0887
       objectReference: {fileID: 0}
     - target: {fileID: 2746863717689098127, guid: 14d999525743c6c44a2b3f7e297b32f3,
         type: 3}
@@ -263,6 +286,16 @@ PrefabInstance:
     - target: {fileID: 2746863717689098127, guid: 14d999525743c6c44a2b3f7e297b32f3,
         type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5016792223015114711, guid: 14d999525743c6c44a2b3f7e297b32f3,
+        type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7356041333657469555, guid: 14d999525743c6c44a2b3f7e297b32f3,
+        type: 3}
+      propertyPath: m_Enabled
       value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []

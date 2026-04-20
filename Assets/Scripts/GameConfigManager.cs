@@ -40,6 +40,9 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Min = 0.2f, Max = 3f, Category = "Game Config")]
     public float enemyStopRange = 1.25f;
 
+    [DebugMember(Category = "Game Config")]
+    public bool pauseWhenConfigMenuOpen = false;
+
     [Header("Controls — Right")]
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Trigger")]
     public string ctrlRTrigger = "Fire (hold to charge)";
@@ -88,6 +91,7 @@ public class GameConfigManager : MonoBehaviour
 
     private DebugInterface _debugInterface;
     private NavMeshDataInstance _navMeshDataInstance;
+    private bool _sceneStartupTriggered;
 
     private IEnumerator SubscribeToDebugPanel()
     {
@@ -113,13 +117,47 @@ public class GameConfigManager : MonoBehaviour
 
     private void OnDebugPanelVisibilityChanged(Controller controller)
     {
+        if (!pauseWhenConfigMenuOpen)
+        {
+            Time.timeScale = 1f;
+            return;
+        }
+
         Time.timeScale = controller.Visibility ? 0f : 1f;
+    }
+
+    void Start()
+    {
+        BeginSceneStartup();
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        BeginSceneStartup();
+    }
+
+    private void BeginSceneStartup()
+    {
+        if (_sceneStartupTriggered)
+            return;
+
+        _sceneStartupTriggered = true;
+        Time.timeScale = 1f;
+        ConfigureMetaXRRuntime();
         FindAndApplySpawnerConfig();
         StartCoroutine(SpawnPlayerTankNearHeadset());
+    }
+
+    private void ConfigureMetaXRRuntime()
+    {
+#if UNITY_EDITOR
+        Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
+#endif
+
+        foreach (var manager in FindObjectsByType<OVRManager>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            manager.shouldBoundaryVisibilityBeSuppressed = false;
+        }
     }
 
     private void FindAndApplySpawnerConfig()
@@ -295,7 +333,6 @@ public class GameConfigManager : MonoBehaviour
         List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
         NavMeshBuilder.CollectSources(sourceRoot, LayerMask.GetMask("Default"), NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
 
-        Debug.Log($"[NavMesh] CollectSources root={(sourceRoot != null ? sourceRoot.name : "<scene>")} count={sources.Count}");
         if (sources.Count == 0)
         {
             Debug.LogWarning("[NavMesh] No navmesh sources were collected.");
@@ -325,7 +362,6 @@ public class GameConfigManager : MonoBehaviour
             }
         }
         bounds.Expand(new Vector3(1f, 1f, 1f));
-        Debug.Log($"[NavMesh] Build bounds center={bounds.center} size={bounds.size}");
 
         if (_navMeshDataInstance.valid)
             _navMeshDataInstance.Remove();
@@ -339,13 +375,11 @@ public class GameConfigManager : MonoBehaviour
         settings.voxelSize = 0.03f;
         settings.overrideTileSize = true;
         settings.tileSize = 64;
-        Debug.Log($"[NavMesh] Using agentTypeID={settings.agentTypeID} radius={settings.agentRadius} height={settings.agentHeight} slope={settings.agentSlope}");
 
         NavMeshData data = NavMeshBuilder.BuildNavMeshData(settings, sources, bounds, Vector3.zero, Quaternion.identity);
         if (data != null)
         {
             _navMeshDataInstance = NavMesh.AddNavMeshData(data);
-            Debug.Log($"[NavMesh] NavMesh data added. valid={_navMeshDataInstance.valid}");
         }
         else
         {
@@ -378,18 +412,20 @@ public class GameConfigManager : MonoBehaviour
             if (target == null || target.maxHitPoints <= 0)
                 continue;
 
-            Rotator rotator = target.GetComponent<Rotator>();
+            Transform root = target.transform;
+
+            Rotator rotator = target.GetComponentInChildren<Rotator>(true);
             if (rotator != null)
                 rotator.enabled = false;
 
-            bool foundNavPosition = NavMesh.SamplePosition(target.transform.position, out NavMeshHit hit, 6f, NavMesh.AllAreas);
+            bool foundNavPosition = NavMesh.SamplePosition(root.position, out NavMeshHit hit, 6f, NavMesh.AllAreas);
 
             if (!foundNavPosition)
             {
                 GameObject gameplayFloor = GameObject.Find("Floor");
                 if (gameplayFloor != null)
                 {
-                    Vector3 floorProbe = target.transform.position;
+                    Vector3 floorProbe = root.position;
                     floorProbe.y = gameplayFloor.transform.position.y + 0.05f;
                     foundNavPosition = NavMesh.SamplePosition(floorProbe, out hit, 6f, NavMesh.AllAreas);
                 }
@@ -400,36 +436,41 @@ public class GameConfigManager : MonoBehaviour
 
             if (!foundNavPosition)
             {
-                Debug.LogWarning($"[NavMesh] Could not find navmesh position near enemy '{target.name}' at {target.transform.position}");
+                Debug.LogWarning($"[NavMesh] Could not find navmesh position near enemy '{target.name}' at {root.position}");
                 continue;
             }
 
-            target.transform.position = hit.position;
-
-            NavMeshAgent agent = target.GetComponent<NavMeshAgent>();
+            NavMeshAgent agent = root.GetComponent<NavMeshAgent>();
             if (agent == null)
-                agent = target.gameObject.AddComponent<NavMeshAgent>();
+            {
+                Debug.LogWarning($"[NavMesh] Enemy '{target.name}' is missing a NavMeshAgent on the prefab.");
+                continue;
+            }
 
+            agent.enabled = true;
             agent.speed = enemyMoveSpeed;
             agent.angularSpeed = 180f;
             agent.acceleration = 2f;
             agent.stoppingDistance = enemyStopRange;
-            agent.radius = 0.12f;
-            agent.height = 0.25f;
-            agent.baseOffset = 0.05f;
             agent.autoBraking = true;
             agent.autoTraverseOffMeshLink = false;
             agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
             agent.Warp(hit.position);
-            Debug.Log($"[NavMesh] Warped enemy '{target.name}' to {hit.position}");
 
-            EnemyTankAI ai = target.GetComponent<EnemyTankAI>();
+            EnemyTankAI ai = root.GetComponent<EnemyTankAI>();
             if (ai == null)
-                ai = target.gameObject.AddComponent<EnemyTankAI>();
+                ai = root.gameObject.AddComponent<EnemyTankAI>();
 
             ai.chaseRange = enemyChaseRange;
             ai.stopRange = enemyStopRange;
             ai.moveSpeed = enemyMoveSpeed;
+
+            // Wire wheel animations to the moving enemy root so the wheels turn with movement.
+            foreach (var wheel in target.GetComponentsInChildren<WheelRotation>(true))
+            {
+                wheel.tankBody = root;
+                wheel.enabled = true;
+            }
         }
     }
 

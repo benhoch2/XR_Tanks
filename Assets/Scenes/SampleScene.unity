@@ -1123,7 +1123,7 @@ MonoBehaviour:
   mrcActivationMode: 0
   launchSimultaneousHandsControllersOnStartup: 0
   isInsightPassthroughEnabled: 1
-  shouldBoundaryVisibilityBeSuppressed: 1
+  shouldBoundaryVisibilityBeSuppressed: 0
   requestBodyTrackingPermissionOnStartup: 0
   requestFaceTrackingPermissionOnStartup: 0
   requestEyeTrackingPermissionOnStartup: 0
@@ -1915,6 +1915,10 @@ MonoBehaviour:
   projectileMinSpeed: 1
   projectileMaxSpeed: 20
   powerUpDuration: 2
+  enemyMoveSpeed: 0.5
+  enemyChaseRange: 4
+  enemyStopRange: 1.25
+  enemyHeightOffset: 0.12
   ctrlRTrigger: Fire (hold to charge)
   ctrlA: Cycle projectile
   ctrlB: Reset / flip tank
