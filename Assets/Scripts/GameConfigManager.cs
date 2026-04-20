@@ -156,7 +156,7 @@ public class GameConfigManager : MonoBehaviour
 
         foreach (var manager in FindObjectsByType<OVRManager>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
-            manager.shouldBoundaryVisibilityBeSuppressed = false;
+            manager.shouldBoundaryVisibilityBeSuppressed = true;
         }
     }
 
