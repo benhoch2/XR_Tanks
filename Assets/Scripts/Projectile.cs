@@ -25,6 +25,10 @@ public class Projectile : MonoBehaviour
 
     [HideInInspector] public Transform shooter;
 
+    // Fired exactly once on the projectile's first "real" collision (after the elevated-floor-ignore filter).
+    // Used by EnemyTankAI to observe where its shots land so it can correct aim between shots.
+    [System.NonSerialized] public System.Action<Vector3> onImpact;
+
     [Tooltip("Explosive shots ignore floor-like collisions only when they happen clearly above the gameplay floor.")]
     public float elevatedFloorIgnoreThreshold = 0.05f;
 
@@ -61,6 +65,13 @@ public class Projectile : MonoBehaviour
             }
         }
 
+        // Fire the one-shot impact callback before type-specific handling can destroy us.
+        if (onImpact != null)
+        {
+            var callback = onImpact;
+            onImpact = null;
+            callback.Invoke(contactPoint);
+        }
 
         // If we hit a Target, Target.cs handles damage and destroys us.
         // For Explosive type, also spawn our own explosion effect on the Target hit.

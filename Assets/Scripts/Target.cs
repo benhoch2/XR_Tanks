@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
 
 public class Target : MonoBehaviour
 {
@@ -16,13 +17,24 @@ public class Target : MonoBehaviour
     [Tooltip("Optional health bar (PowerBar prefab). Shown only for targets with maxHitPoints > 0.")]
     [SerializeField] private PowerBar healthBar;
 
+    [Header("Hit Feedback")]
+    [Tooltip("Optional explosion prefab spawned at the impact point on every hit (lethal or not). Leave null to skip.")]
+    [SerializeField] private GameObject hitExplosionPrefab;
+    [Tooltip("How long the hit explosion lingers before being destroyed.")]
+    [SerializeField] private float hitExplosionDuration = 1.5f;
+    [Tooltip("Knockback displacement (meters) applied to this target on every hit. Primarily matters for NavMeshAgent-driven enemies whose physics is overridden by the agent.")]
+    [SerializeField] private float knockbackDistance = 0.15f;
+
+    private NavMeshAgent _cachedAgent;
+    private bool _agentLookedUp;
+
     private void Awake()
     {
         currentHitPoints = maxHitPoints;
         UpdateHealthBar();
     }
 
-    private void HandleHit(GameObject hitObject, Vector3 hitPoint)
+    private void HandleHit(GameObject hitObject, Vector3 hitPoint, Vector3 hitDirection)
     {
         Projectile proj = hitObject.GetComponent<Projectile>();
         if (proj != null)
@@ -31,6 +43,10 @@ public class Target : MonoBehaviour
 
             // Always destroy the projectile
             Destroy(hitObject);
+
+            // Shared per-hit feedback (explosion + knockback) runs regardless of lethality.
+            SpawnHitExplosion(hitPoint);
+            ApplyKnockback(hitDirection);
 
             // Instant kill path (crates or projectile with 0 damage)
             if (maxHitPoints <= 0 || damage <= 0)
@@ -56,6 +72,35 @@ public class Target : MonoBehaviour
                 OnNonLethalHit(hitPoint);
             }
         }
+    }
+
+    private void SpawnHitExplosion(Vector3 position)
+    {
+        if (hitExplosionPrefab == null) return;
+        GameObject effect = Instantiate(hitExplosionPrefab, position, Quaternion.identity);
+        Destroy(effect, hitExplosionDuration);
+    }
+
+    private void ApplyKnockback(Vector3 worldDirection)
+    {
+        if (knockbackDistance <= 0f) return;
+
+        worldDirection.y = 0f;
+        if (worldDirection.sqrMagnitude < 0.0001f) return;
+
+        if (!_agentLookedUp)
+        {
+            _cachedAgent = GetComponent<NavMeshAgent>();
+            _agentLookedUp = true;
+        }
+
+        // NavMeshAgent overrides transform each frame, so physics impulses on the Rigidbody
+        // would be lost. Apply the knockback as a direct agent displacement instead.
+        if (_cachedAgent != null && _cachedAgent.enabled && _cachedAgent.isOnNavMesh)
+        {
+            _cachedAgent.Move(worldDirection.normalized * knockbackDistance);
+        }
+        // For non-agent targets (player), the existing rigidbody collision impulse already handles knockback.
     }
 
     private void SpawnEffect(float duration)
@@ -101,14 +146,29 @@ public class Target : MonoBehaviour
 		Vector3 contactPoint = collision.contactCount > 0
 			? collision.GetContact(0).point
 			: transform.position;
-		HandleHit(collision.gameObject, contactPoint);
+
+		// Prefer the projectile's own travel direction (collision.relativeVelocity flips sign
+		// in awkward ways when a NavMeshAgent is involved).
+		Vector3 hitDir = Vector3.zero;
+		if (collision.rigidbody != null)
+			hitDir = collision.rigidbody.linearVelocity;
+		if (hitDir.sqrMagnitude < 0.0001f)
+			hitDir = -collision.relativeVelocity;
+
+		HandleHit(collision.gameObject, contactPoint, hitDir);
 	}
 
 	private void OnTriggerEnter(Collider other)
 	{
 		// Triggers don't have contact points; use closest point on our collider
 		Vector3 contactPoint = other.ClosestPoint(transform.position);
-		HandleHit(other.gameObject, contactPoint);
+
+		Rigidbody otherRb = other.attachedRigidbody;
+		Vector3 hitDir = otherRb != null
+			? otherRb.linearVelocity
+			: (transform.position - contactPoint);
+
+		HandleHit(other.gameObject, contactPoint, hitDir);
 	}
 
     private void UpdateHealthBar()

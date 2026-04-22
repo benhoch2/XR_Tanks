@@ -14,7 +14,7 @@ public class GameConfigManager : MonoBehaviour
 
     [Header("Spawning")]
     [DebugMember(Min = 1, Max = 50, Category = "Game Config")]
-    public int numberOfEnemies = 10;
+    public int numberOfEnemies = 5;
 
     [DebugMember(Min = 1, Max = 50, Category = "Game Config")]
     public int numberOfCrates = 10;
@@ -49,11 +49,8 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Min = 10f, Max = 90f, Category = "Game Config")]
     public float enemyScanAngle = 45f;
 
-    [DebugMember(Min = 5f, Max = 90f, Category = "Game Config")]
-    public float enemyScanSpeed = 25f;
-
-    [DebugMember(Min = 1, Max = 6, Category = "Game Config")]
-    public int enemyScanRepetitions = 1;
+    [DebugMember(Min = 5f, Max = 120f, Category = "Game Config")]
+    public float enemyScanSpeed = 45f;
 
     [DebugMember(Min = 0.1f, Max = 1.5f, Category = "Game Config")]
     public float enemyObstacleCheckDistance = 0.25f;
@@ -502,7 +499,6 @@ public class GameConfigManager : MonoBehaviour
             ai.behaviorMode = enemyAIMode == 1 ? EnemyTankAI.BehaviorMode.PatrolScan : EnemyTankAI.BehaviorMode.ChaseWander;
             ai.turretScanAngle = enemyScanAngle;
             ai.turretScanSpeed = enemyScanSpeed;
-            ai.turretScanRepeats = enemyScanRepetitions;
             ai.obstacleCheckDistance = enemyObstacleCheckDistance;
             ai.ResetBehaviorState();
 

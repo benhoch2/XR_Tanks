@@ -1,5 +1,36 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &127828105784197472
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1001318630131235661}
+  m_Layer: 0
+  m_Name: ShootingPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1001318630131235661
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 127828105784197472}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.1, z: 1.08}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 779878606076599248}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1328997221997902240
 GameObject:
   m_ObjectHideFlags: 0
@@ -13,6 +44,7 @@ GameObject:
   - component: {fileID: -3220950573109502217}
   - component: {fileID: -7609455599935997906}
   - component: {fileID: 5249001239229336157}
+  - component: {fileID: 7275309920793000133}
   m_Layer: 0
   m_Name: TargetTank
   m_TagString: Untagged
@@ -116,6 +148,44 @@ NavMeshAgent:
   m_BaseOffset: 0.05
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 3
+--- !u!114 &7275309920793000133
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1328997221997902240}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a3d31a14f0907c4ab26ab06af0c5135, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyTankAI
+  moveSpeed: 0.5
+  chaseRange: 4
+  stopRange: 1.25
+  behaviorMode: 0
+  obstacleCheckDistance: 0.25
+  turretScanAngle: 45
+  turretScanSpeed: 25
+  turretScanRepeats: 2
+  rotationSpeed: 100
+  reverseSpeedFactor: 0.6
+  turnMoveReduction: 0.5
+  wanderRadius: 1.5
+  repathInterval: 1.5
+  enemyProjectilePrefab: {fileID: 1720991040967052277, guid: bcbc50768d8331f42b5358c0cfd4ec18,
+    type: 3}
+  firePoint: {fileID: 1001318630131235661}
+  maxShotsPerVolley: 3
+  enemyProjectileDamage: 15
+  minShotSpeed: 3
+  maxShotSpeed: 8
+  aimYawSpeedDegPerSec: 90
+  aimSettleThresholdDeg: 5
+  aimMaxDuration: 1.5
+  betweenShotsDelay: 0.75
+  shotImpactTimeout: 4
+  losMaxRange: 8
 --- !u!1001 &934253385276023765
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -196,9 +266,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 442916221043226629, guid: ae98f3b2f9fb19e4dba07742ad8d6f4d,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1001318630131235661}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: ae98f3b2f9fb19e4dba07742ad8d6f4d, type: 3}
+--- !u!4 &779878606076599248 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 442916221043226629, guid: ae98f3b2f9fb19e4dba07742ad8d6f4d,
+    type: 3}
+  m_PrefabInstance: {fileID: 934253385276023765}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &1995955800464598654 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1676515232765691307, guid: ae98f3b2f9fb19e4dba07742ad8d6f4d,
