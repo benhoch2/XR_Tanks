@@ -253,6 +253,9 @@ public class EnemyTankAI : MonoBehaviour
         if (enemyProjectilePrefab == null)
             return false;
 
+        if (GameConfigManager.Instance != null && !GameConfigManager.Instance.enemyShootingEnabled)
+            return false;
+
         if (!HasLineOfSightToPlayer(out Vector3 playerPos))
             return false;
 

@@ -41,12 +41,24 @@ public class Target : MonoBehaviour
         {
             int damage = proj.damage;
 
-            // Always destroy the projectile
-            Destroy(hitObject);
+            // Teleport balls own their own lifetime (deferred-teleport timer) and must survive
+            // enemy bounces. Every other type gets destroyed on contact.
+            if (proj.projectileType != ProjectileType.Teleport)
+                Destroy(hitObject);
 
             // Shared per-hit feedback (explosion + knockback) runs regardless of lethality.
             SpawnHitExplosion(hitPoint);
             ApplyKnockback(hitDirection);
+
+            // Player-invulnerability test toggle: show feedback but skip damage entirely.
+            // Detection: ShootingControls only lives on the player tank.
+            if (GameConfigManager.Instance != null
+                && GameConfigManager.Instance.playerInvulnerable
+                && GetComponent<ShootingControls>() != null)
+            {
+                OnNonLethalHit(hitPoint);
+                return;
+            }
 
             // Instant kill path (crates or projectile with 0 damage)
             if (maxHitPoints <= 0 || damage <= 0)

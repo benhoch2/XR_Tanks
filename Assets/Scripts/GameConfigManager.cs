@@ -58,6 +58,13 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Game Config")]
     public bool pauseWhenConfigMenuOpen = true;
 
+    [Header("Testing")]
+    [DebugMember(Category = "Testing")]
+    public bool enemyShootingEnabled = true;
+
+    [DebugMember(Category = "Testing")]
+    public bool playerInvulnerable = false;
+
     [Header("Controls — Right")]
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Trigger")]
     public string ctrlRTrigger = "Fire (hold to charge)";

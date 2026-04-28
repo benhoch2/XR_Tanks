@@ -4,7 +4,7 @@ public enum ProjectileType
 {
     Standard,   // Gray: damages enemies on hit, 5s fuse after first non-enemy collision then explodes
     Explosive,  // Blue: explodes on contact with anything
-    Teleport    // Red: teleports player tank to impact point
+    Teleport    // Red: on first contact, starts a delay timer; at expiry, teleports the shooter to wherever the ball is now
 }
 
 public class Projectile : MonoBehaviour
@@ -23,6 +23,9 @@ public class Projectile : MonoBehaviour
     [Tooltip("Standard type only: seconds before self-destruct after first non-enemy collision.")]
     public float selfDestructTimer = 5f;
 
+    [Tooltip("Teleport type only: seconds between first contact and the deferred teleport. The ball stays alive (and bouncy) during this window.")]
+    public float teleportDelay = 5f;
+
     [HideInInspector] public Transform shooter;
 
     // Fired exactly once on the projectile's first "real" collision (after the elevated-floor-ignore filter).
@@ -32,7 +35,37 @@ public class Projectile : MonoBehaviour
     [Tooltip("Explosive shots ignore floor-like collisions only when they happen clearly above the gameplay floor.")]
     public float elevatedFloorIgnoreThreshold = 0.05f;
 
+    [Header("Physics")]
+    [Tooltip("0 = no bounce, 1 = perfectly elastic. Applied as a runtime PhysicsMaterial on this projectile's collider when it spawns.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float bounciness = 0f;
+
+    [Tooltip("Friction applied alongside bounciness. Lower values let bouncy balls keep rolling instead of stalling on first contact.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float friction = 0.2f;
+
     private bool timerStarted = false;
+    private bool teleportTimerStarted = false;
+
+    private void Awake()
+    {
+        if (bounciness <= 0f)
+            return;
+
+        Collider col = GetComponent<Collider>();
+        if (col == null)
+            return;
+
+        var mat = new PhysicsMaterial("ProjectileBounce")
+        {
+            bounciness = bounciness,
+            bounceCombine = PhysicsMaterialCombine.Maximum,
+            dynamicFriction = friction,
+            staticFriction = friction,
+            frictionCombine = PhysicsMaterialCombine.Average,
+        };
+        col.sharedMaterial = mat;
+    }
 
     private void OnCollisionEnter(Collision collision)
     {
@@ -73,16 +106,16 @@ public class Projectile : MonoBehaviour
             callback.Invoke(contactPoint);
         }
 
-        // If we hit a Target, Target.cs handles damage and destroys us.
-        // For Explosive type, also spawn our own explosion effect on the Target hit.
-        // For Teleport type, also teleport the shooter.
+        // If we hit a Target, Target.cs handles damage. Teleport balls survive the hit
+        // and keep bouncing — Target now skips destroying them so their delayed-teleport
+        // timer can run to completion.
         Target target = collision.gameObject.GetComponent<Target>();
         if (target != null)
         {
             if (projectileType == ProjectileType.Explosive)
                 SpawnExplosionEffect(contactPoint);
             if (projectileType == ProjectileType.Teleport)
-                TeleportShooter(collision);
+                StartTeleportTimerIfNeeded();
             return;
         }
 
@@ -104,25 +137,29 @@ public class Projectile : MonoBehaviour
                 break;
 
             case ProjectileType.Teleport:
-                // Teleport player to impact point then destroy
-                TeleportShooter(collision);
-                Destroy(gameObject);
+                // Defer the teleport: ball stays alive and bouncy until the timer fires.
+                StartTeleportTimerIfNeeded();
                 break;
         }
     }
 
-    private void TeleportShooter(Collision collision)
+    private void StartTeleportTimerIfNeeded()
     {
-        if (shooter == null) return;
+        if (teleportTimerStarted) return;
+        teleportTimerStarted = true;
+        Invoke(nameof(ResolveTeleport), teleportDelay);
+    }
 
-        // Use contact point if available, offset slightly above ground so tank doesn't clip
-        Vector3 hitPoint = collision.contactCount > 0
-            ? collision.GetContact(0).point
-            : transform.position;
-        hitPoint.y += 0.05f;
-
-        SpawnExplosionEffect();
-        shooter.position = hitPoint;
+    private void ResolveTeleport()
+    {
+        if (shooter != null)
+        {
+            Vector3 destination = transform.position;
+            destination.y += 0.05f;
+            shooter.position = destination;
+        }
+        SpawnExplosionEffect(transform.position);
+        Destroy(gameObject);
     }
 
     private void Explode()

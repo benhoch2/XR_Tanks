@@ -189,6 +189,9 @@ public class ShootingControls : MonoBehaviour
         if (col != null)
             col.enabled = false;
 
+        // Blink while visible so it reads as a UI ping rather than a static prop.
+        currentPreview.AddComponent<BlinkRenderer>();
+
         Destroy(currentPreview, previewDuration);
     }
 }

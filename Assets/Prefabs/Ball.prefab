@@ -160,3 +160,5 @@ MonoBehaviour:
   explosionEffectDuration: 2
   selfDestructTimer: 5
   shooter: {fileID: 0}
+  bounciness: 0.1
+  friction: 0.4
