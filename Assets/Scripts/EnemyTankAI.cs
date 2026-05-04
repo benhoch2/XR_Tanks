@@ -77,6 +77,9 @@ public class EnemyTankAI : MonoBehaviour
     [SerializeField] private float aimErrorMaxFactor = 0.1f;
     [Tooltip("Minimum elevation (degrees above horizontal) for a shot — stops enemies from firing flat.")]
     [SerializeField] private float minLaunchElevationDeg = 15f;
+    [Tooltip("ChaseWander only: seconds between volleys once the tank is in stop-range and aiming. " +
+             "Lower = fires more often. Ignored by PatrolScan tanks (which fire whenever a scan ends).")]
+    [SerializeField] private float chaseWanderVolleyCooldown = 3f;
 
     private NavMeshAgent _agent;
     private Transform _player;
@@ -102,6 +105,10 @@ public class EnemyTankAI : MonoBehaviour
     private float _phaseStartTime;
     private bool _awaitingImpact;
     private Collider[] _selfColliders;
+
+    // ChaseWander shooting bookkeeping. Reused for nothing else.
+    private bool _chaseWanderInVolley;
+    private float _nextChaseWanderShotTime;
 
     private void Awake()
     {
@@ -135,6 +142,8 @@ public class EnemyTankAI : MonoBehaviour
         _awaitingImpact = false;
         _hasLastImpact = false;
         _shotsFiredThisVolley = 0;
+        _chaseWanderInVolley = false;
+        _nextChaseWanderShotTime = 0f;
         ResetTurretToForward();
     }
 
@@ -178,10 +187,25 @@ public class EnemyTankAI : MonoBehaviour
     {
         EnsurePlayerCached();
 
+        // If we're already mid-volley, freeze in place and let the shooting state
+        // machine run. Stops the tank from re-pathing or rotating its body while
+        // it's trying to settle the turret on the player.
+        if (_chaseWanderInVolley)
+        {
+            if (UpdateShootingVolley())
+                return;
+
+            _chaseWanderInVolley = false;
+            _nextChaseWanderShotTime = Time.time + chaseWanderVolleyCooldown;
+        }
+
         bool hasTarget = false;
+        bool inFiringRange = false;
+        Vector3 toPlayer = Vector3.zero;
+
         if (_player != null)
         {
-            Vector3 toPlayer = _player.position - transform.position;
+            toPlayer = _player.position - transform.position;
             toPlayer.y = 0f;
             float distanceToPlayer = toPlayer.magnitude;
 
@@ -195,6 +219,7 @@ public class EnemyTankAI : MonoBehaviour
                 }
                 else
                 {
+                    inFiringRange = true;
                     _agent.ResetPath();
                     RotateToward(toPlayer.normalized);
                 }
@@ -209,6 +234,14 @@ public class EnemyTankAI : MonoBehaviour
 
         if (!hasTarget && _agent.hasPath)
             DriveLikeTank(_agent.steeringTarget - transform.position);
+
+        // Try to start a new volley once we're stopped near the player and the
+        // cooldown has elapsed. TryBeginShootingVolley does the LOS check.
+        if (inFiringRange && Time.time >= _nextChaseWanderShotTime && TryBeginShootingVolley())
+        {
+            _chaseWanderInVolley = true;
+            return;
+        }
 
         ResetTurretToForward();
     }
@@ -249,7 +282,8 @@ public class EnemyTankAI : MonoBehaviour
                 break;
 
             case PatrolScanState.Shooting:
-                UpdateShootingVolley();
+                if (!UpdateShootingVolley())
+                    _patrolScanState = PatrolScanState.PickDirection;
                 break;
         }
     }
@@ -273,16 +307,19 @@ public class EnemyTankAI : MonoBehaviour
         return true;
     }
 
-    private void UpdateShootingVolley()
+    /// <summary>
+    /// Drive the shooting state machine one tick. Returns true while a volley is still
+    /// in flight; false once it's complete (so the caller can transition out — e.g.
+    /// PatrolScan goes back to PickDirection, ChaseWander clears its in-volley flag).
+    /// </summary>
+    private bool UpdateShootingVolley()
     {
         // Honor the testing toggle mid-volley: if shooting is disabled while a volley is
         // already in flight, abort cleanly instead of continuing to fire.
         if (GameConfigManager.Instance != null && !GameConfigManager.Instance.enemyShootingEnabled)
         {
             _awaitingImpact = false;
-            TransitionShootingPhase(ShootingPhase.Done);
-            _patrolScanState = PatrolScanState.PickDirection;
-            return;
+            return false;
         }
 
         // Refresh aim target to player's current position each frame (so they're tracked if moving).
@@ -297,13 +334,13 @@ public class EnemyTankAI : MonoBehaviour
                 bool timedOut = Time.time - _phaseStartTime > aimMaxDuration;
                 if (settled || timedOut)
                     TransitionShootingPhase(ShootingPhase.Fire);
-                break;
+                return true;
             }
 
             case ShootingPhase.Fire:
                 FireShot();
                 TransitionShootingPhase(ShootingPhase.WaitForImpact);
-                break;
+                return true;
 
             case ShootingPhase.WaitForImpact:
                 // Keep yaw-tracking while waiting — feels alive.
@@ -314,17 +351,17 @@ public class EnemyTankAI : MonoBehaviour
                     _awaitingImpact = false;
                     AdvanceAfterShot();
                 }
-                break;
+                return true;
 
             case ShootingPhase.BetweenShots:
                 AimTurretYawAtWorldPosition(_currentAimTarget);
                 if (Time.time - _phaseStartTime >= betweenShotsDelay)
                     TransitionShootingPhase(ShootingPhase.Fire);
-                break;
+                return true;
 
             case ShootingPhase.Done:
-                _patrolScanState = PatrolScanState.PickDirection;
-                break;
+            default:
+                return false;
         }
     }
 
