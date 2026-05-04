@@ -28,6 +28,10 @@ public class Target : MonoBehaviour
     private NavMeshAgent _cachedAgent;
     private bool _agentLookedUp;
 
+    // Shared buffer for the per-hit ParticleSystem walk in OnNonLethalHit.
+    // Reused across all Target instances on the main thread to avoid per-hit allocations.
+    private static readonly List<ParticleSystem> _hitParticleBuffer = new List<ParticleSystem>(8);
+
     private void Awake()
     {
         currentHitPoints = maxHitPoints;
@@ -141,12 +145,16 @@ public class Target : MonoBehaviour
                 GameObject effect = Instantiate(prefab, hitPoint, Quaternion.identity);
                 effect.transform.localScale *= 0.3f;
 
-                // Force all particle systems to respect the transform scale
-                foreach (var ps in effect.GetComponentsInChildren<ParticleSystem>())
+                // Force all particle systems to respect the transform scale.
+                // Uses the non-allocating List overload so we don't pay an
+                // array-allocation cost on every non-lethal hit.
+                effect.GetComponentsInChildren(_hitParticleBuffer);
+                for (int i = 0; i < _hitParticleBuffer.Count; i++)
                 {
-                    var main = ps.main;
+                    var main = _hitParticleBuffer[i].main;
                     main.scalingMode = ParticleSystemScalingMode.Hierarchy;
                 }
+                _hitParticleBuffer.Clear();
 
                 Destroy(effect, effectDuration * 0.5f);
             }

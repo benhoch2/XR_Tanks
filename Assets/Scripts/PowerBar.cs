@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class PowerBar : MonoBehaviour
 {
-    [Range  (0f, 1f)]
+    [Range(0f, 1f)]
     public float power = 0.5f;
 
     [SerializeField]

@@ -122,6 +122,19 @@ public class GameConfigManager : MonoBehaviour
     private DebugInterface _debugInterface;
     private NavMeshDataInstance _navMeshDataInstance;
     private bool _sceneStartupTriggered;
+    private GameObject _gameplayFloorCache;
+
+    /// <summary>
+    /// Cached lookup for the gameplay "Floor" GameObject. The cache is invalidated
+    /// when the referenced object is destroyed, so it survives scene reloads as long
+    /// as a new "Floor" exists in the new scene.
+    /// </summary>
+    public GameObject GetGameplayFloor()
+    {
+        if (_gameplayFloorCache == null)
+            _gameplayFloorCache = GameObject.Find("Floor");
+        return _gameplayFloorCache;
+    }
 
     private IEnumerator SubscribeToDebugPanel()
     {
@@ -172,6 +185,7 @@ public class GameConfigManager : MonoBehaviour
     {
         _sceneStartupTriggered = false;
         Time.timeScale = 1f;
+        _gameplayFloorCache = null;
 
         if (_navMeshDataInstance.valid)
             _navMeshDataInstance.Remove();
@@ -360,7 +374,7 @@ public class GameConfigManager : MonoBehaviour
 
     private void ConfigureFallbackFloor(bool enableCollider, float? floorY)
     {
-        GameObject floorObj = GameObject.Find("Floor");
+        GameObject floorObj = GetGameplayFloor();
         if (floorObj == null) return;
 
         if (floorY.HasValue)
@@ -469,7 +483,7 @@ public class GameConfigManager : MonoBehaviour
 
             if (!foundNavPosition)
             {
-                GameObject gameplayFloor = GameObject.Find("Floor");
+                GameObject gameplayFloor = GetGameplayFloor();
                 if (gameplayFloor != null)
                 {
                     Vector3 floorProbe = root.position;
@@ -547,7 +561,7 @@ public class GameConfigManager : MonoBehaviour
         Camera cam = Camera.main;
         Vector3 spawnPos = cam != null ? cam.transform.position + cam.transform.forward * 2f : new Vector3(0f, 0f, 2f);
 
-        GameObject floorObj = GameObject.Find("Floor");
+        GameObject floorObj = GetGameplayFloor();
         if (floorObj != null)
             spawnPos.y = floorObj.transform.position.y + 0.01f;
 

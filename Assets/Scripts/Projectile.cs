@@ -81,7 +81,9 @@ public class Projectile : MonoBehaviour
 
         if (projectileType == ProjectileType.Explosive && isFloorLikeHit)
         {
-            GameObject gameplayFloor = GameObject.Find("Floor");
+            GameObject gameplayFloor = GameConfigManager.Instance != null
+                ? GameConfigManager.Instance.GetGameplayFloor()
+                : null;
             if (gameplayFloor != null)
             {
                 float floorY = gameplayFloor.transform.position.y;

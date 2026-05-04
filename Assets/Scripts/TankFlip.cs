@@ -55,8 +55,7 @@ public class TankFlip : MonoBehaviour
 
     private void PerformResetAndBounce()
     {
-        // Reset rotation to zero
-        transform.rotation = Quaternion.identity;
+        // Reset rotation to zero (relative to parent if any).
         transform.localRotation = Quaternion.identity;
 
         // Ensure we have Rigidbody reference

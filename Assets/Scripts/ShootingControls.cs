@@ -33,7 +33,6 @@ public class ShootingControls : MonoBehaviour
     private bool isCharging = false;
 
     private bool lastTriggerPressed = false;
-    private bool lastAButtonPressed = false;
 
     private GameObject CurrentPrefab =>
         (projectilePrefabs != null && projectilePrefabs.Length > 0)
@@ -73,25 +72,17 @@ public class ShootingControls : MonoBehaviour
 
     void Update()
     {
-        bool triggerPressed = false;
-        bool triggerReleased = false;
-        bool aButtonPressed = false;
-
         float triggerValue = fireAction?.ReadValue<float>() ?? 0f;
         bool isPressedNow = triggerValue > 0.1f;
-        triggerPressed = isPressedNow && !lastTriggerPressed;
-        triggerReleased = !isPressedNow && lastTriggerPressed;
+        bool triggerPressed = isPressedNow && !lastTriggerPressed;
+        bool triggerReleased = !isPressedNow && lastTriggerPressed;
         lastTriggerPressed = isPressedNow;
 
-        bool aValue = cycleProjectileAction?.WasPerformedThisFrame() ?? false;
-        aButtonPressed = aValue && !lastAButtonPressed;
-        lastAButtonPressed = aValue;
+        // WasPerformedThisFrame is already a one-frame pulse, no edge bookkeeping needed.
+        bool aButtonPressed = cycleProjectileAction?.WasPerformedThisFrame() ?? false;
 
-        // Cycle projectile type
         if (aButtonPressed)
-        {
             CycleProjectile();
-        }
 
         // Start charging
         if (triggerPressed)
@@ -158,8 +149,6 @@ public class ShootingControls : MonoBehaviour
         if (projectilePrefabs == null || projectilePrefabs.Length == 0) return;
 
         currentProjectileIndex = (currentProjectileIndex + 1) % projectilePrefabs.Length;
-        Debug.Log($"Projectile switched to: {CurrentPrefab.name} ({currentProjectileIndex + 1}/{projectilePrefabs.Length})");
-
         ShowPreview();
     }
 

@@ -89,12 +89,14 @@ public class EnemyTankAI : MonoBehaviour
     private bool _hasLastImpact;
     private float _phaseStartTime;
     private bool _awaitingImpact;
+    private Collider[] _selfColliders;
 
     private void Awake()
     {
         _agent = GetComponent<NavMeshAgent>();
         _homePosition = transform.position;
         _turretTransform = FindTurretTransform();
+        _selfColliders = GetComponentsInChildren<Collider>(true);
 
         if (_agent != null)
         {
@@ -152,6 +154,16 @@ public class EnemyTankAI : MonoBehaviour
         }
     }
 
+    private void EnsurePlayerCached()
+    {
+        if (_player != null)
+            return;
+
+        ShootingControls pc = FindAnyObjectByType<ShootingControls>();
+        if (pc != null)
+            _player = pc.transform;
+    }
+
     private void SyncConfigFromManager()
     {
         if (GameConfigManager.Instance == null)
@@ -168,12 +180,7 @@ public class EnemyTankAI : MonoBehaviour
 
     private void UpdateChaseWanderMode()
     {
-        if (_player == null)
-        {
-            ShootingControls playerControls = FindAnyObjectByType<ShootingControls>();
-            if (playerControls != null)
-                _player = playerControls.transform;
-        }
+        EnsurePlayerCached();
 
         bool hasTarget = false;
         if (_player != null)
@@ -388,10 +395,13 @@ public class EnemyTankAI : MonoBehaviour
         proj.onImpact = OnProjectileImpact;
 
         Collider projCol = projObj.GetComponent<Collider>();
-        if (projCol != null)
+        if (projCol != null && _selfColliders != null)
         {
-            foreach (var selfCol in GetComponentsInChildren<Collider>())
-                Physics.IgnoreCollision(projCol, selfCol);
+            for (int i = 0; i < _selfColliders.Length; i++)
+            {
+                if (_selfColliders[i] != null)
+                    Physics.IgnoreCollision(projCol, _selfColliders[i]);
+            }
         }
 
         Rigidbody rb = projObj.GetComponent<Rigidbody>();
@@ -491,13 +501,9 @@ public class EnemyTankAI : MonoBehaviour
     {
         playerPos = Vector3.zero;
 
+        EnsurePlayerCached();
         if (_player == null)
-        {
-            ShootingControls pc = FindAnyObjectByType<ShootingControls>();
-            if (pc == null)
-                return false;
-            _player = pc.transform;
-        }
+            return false;
 
         Transform origin = _turretTransform != null ? _turretTransform : transform;
         Vector3 originPos = origin.position + Vector3.up * 0.05f;
@@ -604,6 +610,11 @@ public class EnemyTankAI : MonoBehaviour
                 return;
             }
         }
+
+        // All random samples failed (corner trap, tiny room, all probes off-mesh).
+        // Fall back to the home position so the agent doesn't silently freeze.
+        if (NavMesh.SamplePosition(_homePosition, out NavMeshHit homeHit, 2f, NavMesh.AllAreas))
+            _agent.SetDestination(homeHit.position);
     }
 
     private void PickRandomPatrolDirection()
