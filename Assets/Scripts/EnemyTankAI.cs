@@ -330,7 +330,7 @@ public class EnemyTankAI : MonoBehaviour
         {
             case ShootingPhase.AimAtPlayer:
             {
-                bool settled = AimTurretYawAtWorldPosition(_currentAimTarget);
+                bool settled = AimTurretAtWorldPosition(_currentAimTarget);
                 bool timedOut = Time.time - _phaseStartTime > aimMaxDuration;
                 if (settled || timedOut)
                     TransitionShootingPhase(ShootingPhase.Fire);
@@ -344,7 +344,7 @@ public class EnemyTankAI : MonoBehaviour
 
             case ShootingPhase.WaitForImpact:
                 // Keep yaw-tracking while waiting — feels alive.
-                AimTurretYawAtWorldPosition(_currentAimTarget);
+                AimTurretAtWorldPosition(_currentAimTarget);
                 if (!_awaitingImpact || Time.time - _phaseStartTime > shotImpactTimeout)
                 {
                     // Timeout counts as a miss with no correction feedback.
@@ -354,7 +354,7 @@ public class EnemyTankAI : MonoBehaviour
                 return true;
 
             case ShootingPhase.BetweenShots:
-                AimTurretYawAtWorldPosition(_currentAimTarget);
+                AimTurretAtWorldPosition(_currentAimTarget);
                 if (Time.time - _phaseStartTime >= betweenShotsDelay)
                     TransitionShootingPhase(ShootingPhase.Fire);
                 return true;
@@ -576,23 +576,41 @@ public class EnemyTankAI : MonoBehaviour
         return false;
     }
 
-    private bool AimTurretYawAtWorldPosition(Vector3 worldPos)
+    private bool AimTurretAtWorldPosition(Vector3 worldPos)
     {
         if (_turretTransform == null)
             return true;
 
-        Vector3 toTarget = worldPos - _turretTransform.position;
-        toTarget.y = 0f;
-        if (toTarget.sqrMagnitude < 0.0001f)
+        Vector3 toTargetHoriz = worldPos - _turretTransform.position;
+        toTargetHoriz.y = 0f;
+        if (toTargetHoriz.sqrMagnitude < 0.0001f)
             return true;
 
-        float desiredYaw = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
+        // Yaw — point the turret horizontally at the target.
+        float desiredYaw = Mathf.Atan2(toTargetHoriz.x, toTargetHoriz.z) * Mathf.Rad2Deg;
+
+        // Pitch — match the ballistic launch angle of the next shot so the barrel
+        // visually tracks the firing arc instead of staying flat regardless of
+        // elevation. Re-runs the same solver FireShot uses so the visual matches
+        // the actual launch velocity.
+        float horizDist = toTargetHoriz.magnitude;
+        Vector3 firePos = GetFirePosition();
+        float launchSpeed = ComputeLaunchSpeed(horizDist);
+        SolveBallistic(firePos, worldPos, launchSpeed, out Vector3 launchVelocity);
+        launchVelocity = EnforceMinElevation(launchVelocity);
+        float launchHoriz = new Vector2(launchVelocity.x, launchVelocity.z).magnitude;
+        float desiredPitch = Mathf.Atan2(launchVelocity.y, launchHoriz) * Mathf.Rad2Deg;
+
         Vector3 euler = _turretTransform.eulerAngles;
         float newYaw = Mathf.MoveTowardsAngle(euler.y, desiredYaw, aimYawSpeedDegPerSec * Time.deltaTime);
+        float newPitch = Mathf.MoveTowardsAngle(euler.x, desiredPitch, aimYawSpeedDegPerSec * Time.deltaTime);
         euler.y = newYaw;
+        euler.x = newPitch;
         _turretTransform.eulerAngles = euler;
 
-        return Mathf.Abs(Mathf.DeltaAngle(newYaw, desiredYaw)) <= aimSettleThresholdDeg;
+        bool yawSettled = Mathf.Abs(Mathf.DeltaAngle(newYaw, desiredYaw)) <= aimSettleThresholdDeg;
+        bool pitchSettled = Mathf.Abs(Mathf.DeltaAngle(newPitch, desiredPitch)) <= aimSettleThresholdDeg;
+        return yawSettled && pitchSettled;
     }
 
     private void DriveLikeTank(Vector3 desiredDirection)
@@ -757,8 +775,13 @@ public class EnemyTankAI : MonoBehaviour
         if (_turretTransform == null)
             return;
 
+        // Yaw back to body-forward and pitch back to horizontal. Without the pitch
+        // reset, the barrel would stay tilted up between volleys after AimTurret
+        // had pitched it for a ballistic shot.
+        float resetSpeed = turretScanSpeed * 2f * Time.deltaTime;
         Vector3 localEuler = _turretTransform.localEulerAngles;
-        localEuler.y = Mathf.MoveTowardsAngle(localEuler.y, 0f, turretScanSpeed * 2f * Time.deltaTime);
+        localEuler.y = Mathf.MoveTowardsAngle(localEuler.y, 0f, resetSpeed);
+        localEuler.x = Mathf.MoveTowardsAngle(localEuler.x, 0f, resetSpeed);
         _turretTransform.localEulerAngles = localEuler;
     }
 
