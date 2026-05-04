@@ -30,31 +30,6 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Min = 1, Max = 10, Category = "Game Config")]
     public int powerUpDuration = 2;
 
-    [Header("Enemy Movement")]
-    [DebugMember(Min = 0.1f, Max = 3f, Category = "Game Config")]
-    public float enemyMoveSpeed = 0.5f;
-
-    [DebugMember(Min = 0.5f, Max = 10f, Category = "Game Config")]
-    public float enemyChaseRange = 4f;
-
-    [DebugMember(Min = 0.2f, Max = 3f, Category = "Game Config")]
-    public float enemyStopRange = 1.25f;
-
-    [DebugMember(Min = 0, Max = 1, Category = "Game Config")]
-    public int enemyAIMode = 1;
-
-    [DebugMember(Tweakable = false, Category = "Game Config", DisplayName = "AI Modes")]
-    public string enemyAIModeHelp = "0 = Chase/Wander, 1 = Patrol/Scan";
-
-    [DebugMember(Min = 10f, Max = 90f, Category = "Game Config")]
-    public float enemyScanAngle = 45f;
-
-    [DebugMember(Min = 5f, Max = 120f, Category = "Game Config")]
-    public float enemyScanSpeed = 45f;
-
-    [DebugMember(Min = 0.1f, Max = 1.5f, Category = "Game Config")]
-    public float enemyObstacleCheckDistance = 0.25f;
-
     [DebugMember(Category = "Game Config")]
     public bool pauseWhenConfigMenuOpen = true;
 
@@ -561,27 +536,23 @@ public class GameConfigManager : MonoBehaviour
                 continue;
             }
 
+            // Per-tank stats (moveSpeed, stopRange, etc.) live on the EnemyTankAI prefab now,
+            // so we read them off the AI to seed the agent rather than pushing global manager
+            // values. This is what lets Light/Medium/Heavy variants behave differently.
+            EnemyTankAI ai = root.GetComponent<EnemyTankAI>();
+            if (ai == null)
+                ai = root.gameObject.AddComponent<EnemyTankAI>();
+
             agent.enabled = true;
-            agent.speed = enemyMoveSpeed;
+            agent.speed = ai.moveSpeed;
             agent.angularSpeed = 180f;
             agent.acceleration = 2f;
-            agent.stoppingDistance = enemyStopRange;
+            agent.stoppingDistance = ai.stopRange;
             agent.autoBraking = true;
             agent.autoTraverseOffMeshLink = false;
             agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
             agent.Warp(hit.position);
 
-            EnemyTankAI ai = root.GetComponent<EnemyTankAI>();
-            if (ai == null)
-                ai = root.gameObject.AddComponent<EnemyTankAI>();
-
-            ai.chaseRange = enemyChaseRange;
-            ai.stopRange = enemyStopRange;
-            ai.moveSpeed = enemyMoveSpeed;
-            ai.behaviorMode = enemyAIMode == 1 ? EnemyTankAI.BehaviorMode.PatrolScan : EnemyTankAI.BehaviorMode.ChaseWander;
-            ai.turretScanAngle = enemyScanAngle;
-            ai.turretScanSpeed = enemyScanSpeed;
-            ai.obstacleCheckDistance = enemyObstacleCheckDistance;
             ai.ResetBehaviorState();
 
             // Wire wheel animations to the moving enemy root so the wheels turn with movement.
@@ -687,13 +658,6 @@ public class GameConfigManager : MonoBehaviour
         projectileMinSpeed = _defaults.projectileMinSpeed;
         projectileMaxSpeed = _defaults.projectileMaxSpeed;
         powerUpDuration = _defaults.powerUpDuration;
-        enemyMoveSpeed = _defaults.enemyMoveSpeed;
-        enemyChaseRange = _defaults.enemyChaseRange;
-        enemyStopRange = _defaults.enemyStopRange;
-        enemyAIMode = _defaults.enemyAIMode;
-        enemyScanAngle = _defaults.enemyScanAngle;
-        enemyScanSpeed = _defaults.enemyScanSpeed;
-        enemyObstacleCheckDistance = _defaults.enemyObstacleCheckDistance;
         pauseWhenConfigMenuOpen = _defaults.pauseWhenConfigMenuOpen;
         enemyShootingEnabled = _defaults.enemyShootingEnabled;
         playerInvulnerable = _defaults.playerInvulnerable;
@@ -711,9 +675,6 @@ public class GameConfigManager : MonoBehaviour
     {
         public int numberOfEnemies, numberOfCrates;
         public int projectileMinSpeed, projectileMaxSpeed, powerUpDuration;
-        public float enemyMoveSpeed, enemyChaseRange, enemyStopRange;
-        public int enemyAIMode;
-        public float enemyScanAngle, enemyScanSpeed, enemyObstacleCheckDistance;
         public bool pauseWhenConfigMenuOpen, enemyShootingEnabled, playerInvulnerable;
     }
 
@@ -726,13 +687,6 @@ public class GameConfigManager : MonoBehaviour
         _defaults.projectileMinSpeed = projectileMinSpeed;
         _defaults.projectileMaxSpeed = projectileMaxSpeed;
         _defaults.powerUpDuration = powerUpDuration;
-        _defaults.enemyMoveSpeed = enemyMoveSpeed;
-        _defaults.enemyChaseRange = enemyChaseRange;
-        _defaults.enemyStopRange = enemyStopRange;
-        _defaults.enemyAIMode = enemyAIMode;
-        _defaults.enemyScanAngle = enemyScanAngle;
-        _defaults.enemyScanSpeed = enemyScanSpeed;
-        _defaults.enemyObstacleCheckDistance = enemyObstacleCheckDistance;
         _defaults.pauseWhenConfigMenuOpen = pauseWhenConfigMenuOpen;
         _defaults.enemyShootingEnabled = enemyShootingEnabled;
         _defaults.playerInvulnerable = playerInvulnerable;
@@ -745,13 +699,6 @@ public class GameConfigManager : MonoBehaviour
         projectileMinSpeed = PlayerPrefs.GetInt(PrefPrefix + nameof(projectileMinSpeed), projectileMinSpeed);
         projectileMaxSpeed = PlayerPrefs.GetInt(PrefPrefix + nameof(projectileMaxSpeed), projectileMaxSpeed);
         powerUpDuration = PlayerPrefs.GetInt(PrefPrefix + nameof(powerUpDuration), powerUpDuration);
-        enemyMoveSpeed = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyMoveSpeed), enemyMoveSpeed);
-        enemyChaseRange = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyChaseRange), enemyChaseRange);
-        enemyStopRange = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyStopRange), enemyStopRange);
-        enemyAIMode = PlayerPrefs.GetInt(PrefPrefix + nameof(enemyAIMode), enemyAIMode);
-        enemyScanAngle = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyScanAngle), enemyScanAngle);
-        enemyScanSpeed = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyScanSpeed), enemyScanSpeed);
-        enemyObstacleCheckDistance = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyObstacleCheckDistance), enemyObstacleCheckDistance);
         pauseWhenConfigMenuOpen = PlayerPrefs.GetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0) != 0;
         enemyShootingEnabled = PlayerPrefs.GetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0) != 0;
         playerInvulnerable = PlayerPrefs.GetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0) != 0;
@@ -764,13 +711,6 @@ public class GameConfigManager : MonoBehaviour
         PlayerPrefs.SetInt(PrefPrefix + nameof(projectileMinSpeed), projectileMinSpeed);
         PlayerPrefs.SetInt(PrefPrefix + nameof(projectileMaxSpeed), projectileMaxSpeed);
         PlayerPrefs.SetInt(PrefPrefix + nameof(powerUpDuration), powerUpDuration);
-        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyMoveSpeed), enemyMoveSpeed);
-        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyChaseRange), enemyChaseRange);
-        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyStopRange), enemyStopRange);
-        PlayerPrefs.SetInt(PrefPrefix + nameof(enemyAIMode), enemyAIMode);
-        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyScanAngle), enemyScanAngle);
-        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyScanSpeed), enemyScanSpeed);
-        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyObstacleCheckDistance), enemyObstacleCheckDistance);
         PlayerPrefs.SetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0);
         PlayerPrefs.SetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0);
         PlayerPrefs.SetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0);

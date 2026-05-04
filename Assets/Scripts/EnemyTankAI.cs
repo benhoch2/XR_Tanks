@@ -27,13 +27,25 @@ public class EnemyTankAI : MonoBehaviour
         Done
     }
 
-    [HideInInspector] public float moveSpeed = 0.5f;
-    [HideInInspector] public float chaseRange = 4f;
-    [HideInInspector] public float stopRange = 1.25f;
-    [HideInInspector] public BehaviorMode behaviorMode = BehaviorMode.ChaseWander;
-    [HideInInspector] public float obstacleCheckDistance = 0.25f;
-    [HideInInspector] public float turretScanAngle = 45f;
-    [HideInInspector] public float turretScanSpeed = 25f;
+    [Header("Movement")]
+    [Tooltip("Top forward speed in m/s. Authoritative on the prefab — distinct values per variant give Light/Medium/Heavy tanks.")]
+    public float moveSpeed = 0.5f;
+    [Tooltip("Distance at which this tank starts chasing the player.")]
+    public float chaseRange = 4f;
+    [Tooltip("Distance at which this tank stops moving toward the player and rotates in place to aim.")]
+    public float stopRange = 1.25f;
+    [Tooltip("How far ahead the obstacle sphere-cast looks before this tank decides it's blocked.")]
+    public float obstacleCheckDistance = 0.25f;
+
+    [Header("AI")]
+    [Tooltip("Per-prefab AI mode. ChaseWander tanks pursue the player when in chase range; PatrolScan tanks roam, scan, then fire volleys.")]
+    public BehaviorMode behaviorMode = BehaviorMode.ChaseWander;
+
+    [Header("Turret Scan")]
+    [Tooltip("Half-angle of the turret's left/right scan sweep, in degrees.")]
+    public float turretScanAngle = 45f;
+    [Tooltip("Turret yaw rate during a scan sweep, in degrees per second.")]
+    public float turretScanSpeed = 25f;
 
     [Header("Scan")]
     [Tooltip("Inclusive minimum number of half-sweeps per scan. Randomized per scan so enemies desync.")]
@@ -131,8 +143,6 @@ public class EnemyTankAI : MonoBehaviour
         if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh)
             return;
 
-        SyncConfigFromManager();
-
         _agent.speed = moveSpeed;
         _agent.stoppingDistance = stopRange;
 
@@ -162,20 +172,6 @@ public class EnemyTankAI : MonoBehaviour
         ShootingControls pc = FindAnyObjectByType<ShootingControls>();
         if (pc != null)
             _player = pc.transform;
-    }
-
-    private void SyncConfigFromManager()
-    {
-        if (GameConfigManager.Instance == null)
-            return;
-
-        moveSpeed = GameConfigManager.Instance.enemyMoveSpeed;
-        chaseRange = GameConfigManager.Instance.enemyChaseRange;
-        stopRange = GameConfigManager.Instance.enemyStopRange;
-        obstacleCheckDistance = GameConfigManager.Instance.enemyObstacleCheckDistance;
-        turretScanAngle = GameConfigManager.Instance.enemyScanAngle;
-        turretScanSpeed = GameConfigManager.Instance.enemyScanSpeed;
-        behaviorMode = GameConfigManager.Instance.enemyAIMode == 1 ? BehaviorMode.PatrolScan : BehaviorMode.ChaseWander;
     }
 
     private void UpdateChaseWanderMode()
