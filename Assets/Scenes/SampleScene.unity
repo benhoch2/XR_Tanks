@@ -1759,7 +1759,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   SpawnOnStart: 1
-  SpawnObject: {fileID: 1328997221997902240, guid: 0efd2192e5d78f549807be837211fb0d,
+  SpawnObject: {fileID: 7188619540205422496, guid: 7a186b8022c37eb4da6ec0a1e19b328e,
     type: 3}
   SpawnAmount: 5
   MaxIterations: 1000
@@ -1915,10 +1915,12 @@ MonoBehaviour:
   projectileMinSpeed: 1
   projectileMaxSpeed: 20
   powerUpDuration: 2
-  enemyMoveSpeed: 0.5
-  enemyChaseRange: 4
-  enemyStopRange: 1.25
-  enemyHeightOffset: 0.12
+  pauseWhenConfigMenuOpen: 1
+  navMeshLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  enemyShootingEnabled: 1
+  playerInvulnerable: 0
   ctrlRTrigger: Fire (hold to charge)
   ctrlA: Cycle projectile
   ctrlB: Reset / flip tank
