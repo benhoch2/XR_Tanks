@@ -103,12 +103,20 @@ public class GameConfigManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Snapshot inspector defaults BEFORE applying any persisted overrides so
+        // RestoreDefaults() can reach them later. Then load whatever the user
+        // saved on the previous run.
+        CaptureDefaults();
+        LoadPersistedConfig();
+
         SceneManager.sceneLoaded += OnSceneLoaded;
         _debugPanelCoroutine = StartCoroutine(SubscribeToDebugPanel());
     }
 
     void OnDestroy()
     {
+        SaveConfig();
         SceneManager.sceneLoaded -= OnSceneLoaded;
         if (_debugInterface != null)
         {
@@ -117,6 +125,20 @@ public class GameConfigManager : MonoBehaviour
         Time.timeScale = 1f;
         if (_navMeshDataInstance.valid)
             _navMeshDataInstance.Remove();
+    }
+
+    void OnApplicationPause(bool paused)
+    {
+        // On Quest, the headset going to sleep / app being backgrounded fires
+        // OnApplicationPause(true). Save here so settings survive even if the
+        // OS later kills the app without a clean OnApplicationQuit.
+        if (paused)
+            SaveConfig();
+    }
+
+    void OnApplicationQuit()
+    {
+        SaveConfig();
     }
 
     private DebugInterface _debugInterface;
@@ -655,5 +677,103 @@ public class GameConfigManager : MonoBehaviour
         ResetSceneStartupState();
         Scene active = SceneManager.GetActiveScene();
         SceneManager.LoadScene(active.name);
+    }
+
+    [DebugMember(Category = "Game Config")]
+    public void RestoreDefaults()
+    {
+        numberOfEnemies = _defaults.numberOfEnemies;
+        numberOfCrates = _defaults.numberOfCrates;
+        projectileMinSpeed = _defaults.projectileMinSpeed;
+        projectileMaxSpeed = _defaults.projectileMaxSpeed;
+        powerUpDuration = _defaults.powerUpDuration;
+        enemyMoveSpeed = _defaults.enemyMoveSpeed;
+        enemyChaseRange = _defaults.enemyChaseRange;
+        enemyStopRange = _defaults.enemyStopRange;
+        enemyAIMode = _defaults.enemyAIMode;
+        enemyScanAngle = _defaults.enemyScanAngle;
+        enemyScanSpeed = _defaults.enemyScanSpeed;
+        enemyObstacleCheckDistance = _defaults.enemyObstacleCheckDistance;
+        pauseWhenConfigMenuOpen = _defaults.pauseWhenConfigMenuOpen;
+        enemyShootingEnabled = _defaults.enemyShootingEnabled;
+        playerInvulnerable = _defaults.playerInvulnerable;
+
+        SaveConfig();
+
+        Debug.Log("[GameConfig] Restored defaults. Hit Reload Scene to respawn with the new counts.");
+    }
+
+    // ---------- Persistence ----------
+
+    private const string PrefPrefix = "XRTanks.GameConfig.";
+
+    private struct ConfigDefaults
+    {
+        public int numberOfEnemies, numberOfCrates;
+        public int projectileMinSpeed, projectileMaxSpeed, powerUpDuration;
+        public float enemyMoveSpeed, enemyChaseRange, enemyStopRange;
+        public int enemyAIMode;
+        public float enemyScanAngle, enemyScanSpeed, enemyObstacleCheckDistance;
+        public bool pauseWhenConfigMenuOpen, enemyShootingEnabled, playerInvulnerable;
+    }
+
+    private ConfigDefaults _defaults;
+
+    private void CaptureDefaults()
+    {
+        _defaults.numberOfEnemies = numberOfEnemies;
+        _defaults.numberOfCrates = numberOfCrates;
+        _defaults.projectileMinSpeed = projectileMinSpeed;
+        _defaults.projectileMaxSpeed = projectileMaxSpeed;
+        _defaults.powerUpDuration = powerUpDuration;
+        _defaults.enemyMoveSpeed = enemyMoveSpeed;
+        _defaults.enemyChaseRange = enemyChaseRange;
+        _defaults.enemyStopRange = enemyStopRange;
+        _defaults.enemyAIMode = enemyAIMode;
+        _defaults.enemyScanAngle = enemyScanAngle;
+        _defaults.enemyScanSpeed = enemyScanSpeed;
+        _defaults.enemyObstacleCheckDistance = enemyObstacleCheckDistance;
+        _defaults.pauseWhenConfigMenuOpen = pauseWhenConfigMenuOpen;
+        _defaults.enemyShootingEnabled = enemyShootingEnabled;
+        _defaults.playerInvulnerable = playerInvulnerable;
+    }
+
+    private void LoadPersistedConfig()
+    {
+        numberOfEnemies = PlayerPrefs.GetInt(PrefPrefix + nameof(numberOfEnemies), numberOfEnemies);
+        numberOfCrates = PlayerPrefs.GetInt(PrefPrefix + nameof(numberOfCrates), numberOfCrates);
+        projectileMinSpeed = PlayerPrefs.GetInt(PrefPrefix + nameof(projectileMinSpeed), projectileMinSpeed);
+        projectileMaxSpeed = PlayerPrefs.GetInt(PrefPrefix + nameof(projectileMaxSpeed), projectileMaxSpeed);
+        powerUpDuration = PlayerPrefs.GetInt(PrefPrefix + nameof(powerUpDuration), powerUpDuration);
+        enemyMoveSpeed = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyMoveSpeed), enemyMoveSpeed);
+        enemyChaseRange = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyChaseRange), enemyChaseRange);
+        enemyStopRange = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyStopRange), enemyStopRange);
+        enemyAIMode = PlayerPrefs.GetInt(PrefPrefix + nameof(enemyAIMode), enemyAIMode);
+        enemyScanAngle = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyScanAngle), enemyScanAngle);
+        enemyScanSpeed = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyScanSpeed), enemyScanSpeed);
+        enemyObstacleCheckDistance = PlayerPrefs.GetFloat(PrefPrefix + nameof(enemyObstacleCheckDistance), enemyObstacleCheckDistance);
+        pauseWhenConfigMenuOpen = PlayerPrefs.GetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0) != 0;
+        enemyShootingEnabled = PlayerPrefs.GetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0) != 0;
+        playerInvulnerable = PlayerPrefs.GetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0) != 0;
+    }
+
+    private void SaveConfig()
+    {
+        PlayerPrefs.SetInt(PrefPrefix + nameof(numberOfEnemies), numberOfEnemies);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(numberOfCrates), numberOfCrates);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(projectileMinSpeed), projectileMinSpeed);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(projectileMaxSpeed), projectileMaxSpeed);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(powerUpDuration), powerUpDuration);
+        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyMoveSpeed), enemyMoveSpeed);
+        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyChaseRange), enemyChaseRange);
+        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyStopRange), enemyStopRange);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(enemyAIMode), enemyAIMode);
+        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyScanAngle), enemyScanAngle);
+        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyScanSpeed), enemyScanSpeed);
+        PlayerPrefs.SetFloat(PrefPrefix + nameof(enemyObstacleCheckDistance), enemyObstacleCheckDistance);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0);
+        PlayerPrefs.Save();
     }
 }
