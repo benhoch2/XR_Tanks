@@ -13,6 +13,12 @@ public class TowerController : MonoBehaviour
     [Header("Tank Movement Settings")]
     public float moveSpeed = 5f;
 
+    [Tooltip("If the tank's up axis deviates from world up by more than this many degrees, " +
+             "drive input is ignored — the tank is on its side or back and can't drive. " +
+             "Turret rotation/tilt is unaffected so the player can still look around while " +
+             "they hold B to flip back upright.")]
+    [SerializeField] private float maxDriveTiltDegrees = 60f;
+
     private InputAction moveAction;
     private InputAction aimAction;
     private float currentTilt = 0f;
@@ -52,10 +58,18 @@ public class TowerController : MonoBehaviour
 
     void MoveTank(float moveInput, float turnInput)
     {
+        if (IsTippedOver())
+            return;
+
         if (Mathf.Abs(turnInput) > 0.01f)
             transform.Rotate(Vector3.up, turnInput * rotationSpeed * Time.deltaTime);
         if (Mathf.Abs(moveInput) > 0.01f)
             transform.position += transform.forward * moveInput * moveSpeed * Time.deltaTime;
+    }
+
+    private bool IsTippedOver()
+    {
+        return Vector3.Angle(transform.up, Vector3.up) > maxDriveTiltDegrees;
     }
 
     void RotateTower(float input)
