@@ -31,6 +31,7 @@ public class ShootingControls : MonoBehaviour
 
     private float chargeStartTime = 0f;
     private bool isCharging = false;
+    private bool fullChargeNotified = false;
 
     private bool lastTriggerPressed = false;
 
@@ -89,6 +90,7 @@ public class ShootingControls : MonoBehaviour
         {
             chargeStartTime = Time.time;
             isCharging = true;
+            fullChargeNotified = false;
             if (powerBar != null) powerBar.power = 0f;
         }
 
@@ -99,6 +101,14 @@ public class ShootingControls : MonoBehaviour
             float normalized = (maxChargeTime > 0f) ? (chargeDurationNow / maxChargeTime) : 1f;
             normalized = Mathf.Clamp01(normalized);
             if (powerBar != null) powerBar.power = normalized;
+
+            // Single haptic ping when the charge bar first hits 100% so the player knows
+            // they're at max power without looking at the bar.
+            if (!fullChargeNotified && normalized >= 1f)
+            {
+                fullChargeNotified = true;
+                Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.3f, 0.5f, 0.06f);
+            }
         }
 
         // Fire
@@ -118,6 +128,9 @@ public class ShootingControls : MonoBehaviour
         GameObject prefab = CurrentPrefab;
         if (prefab != null && firePoint != null)
         {
+            // Crisper "thunk" pulse on fire. Stronger than the charge ping.
+            Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.5f, 0.8f, 0.1f);
+
             GameObject projectile = Instantiate(prefab, firePoint.position, firePoint.rotation);
 
             Projectile proj = projectile.GetComponent<Projectile>();

@@ -53,6 +53,7 @@ public class Target : MonoBehaviour
             // Shared per-hit feedback (explosion + knockback) runs regardless of lethality.
             SpawnHitExplosion(hitPoint);
             ApplyKnockback(hitDirection);
+            TryFirePlayerHitConfirmedHaptic(proj);
 
             // Player-invulnerability test toggle: show feedback but skip damage entirely.
             // Detection: ShootingControls only lives on the player tank.
@@ -95,6 +96,23 @@ public class Target : MonoBehaviour
         if (hitExplosionPrefab == null) return;
         GameObject effect = Instantiate(hitExplosionPrefab, position, Quaternion.identity);
         Destroy(effect, hitExplosionDuration);
+    }
+
+    private void TryFirePlayerHitConfirmedHaptic(Projectile proj)
+    {
+        // Only ping the player when their own shot connects with another Target
+        // (not when an enemy's shot lands, and not when the player gets hit).
+        if (proj == null || proj.shooter == null)
+            return;
+
+        if (GetComponent<ShootingControls>() != null)
+            return; // we ARE the player; no self hit-confirm
+
+        ShootingControls shooterControls = proj.shooter.GetComponent<ShootingControls>();
+        if (shooterControls == null)
+            return; // shooter isn't the player
+
+        Haptics.Pulse(shooterControls, OVRInput.Controller.RTouch, 0.6f, 0.7f, 0.07f);
     }
 
     private void ApplyKnockback(Vector3 worldDirection)
