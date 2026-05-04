@@ -73,15 +73,14 @@ public class Target : MonoBehaviour
                 return;
             }
 
-            // Health-based path (enemies)
+            // Health-based path (enemies and the player tank).
             currentHitPoints -= damage;
-            Debug.Log($"{gameObject.name} hit for {damage} damage. HP: {currentHitPoints}/{maxHitPoints}");
             UpdateHealthBar();
 
             if (currentHitPoints <= 0)
             {
                 SpawnEffect(effectDuration);
-                Destroy(gameObject);
+                HandleLethalHit();
             }
             else
             {
@@ -89,6 +88,39 @@ public class Target : MonoBehaviour
                 OnNonLethalHit(hitPoint);
             }
         }
+    }
+
+    private void HandleLethalHit()
+    {
+        // The player tank carries ShootingControls; enemies don't.
+        if (GetComponent<ShootingControls>() != null)
+        {
+            StartCoroutine(HandlePlayerDeath());
+            return;
+        }
+
+        // Enemy died — notify the manager so the win condition can resolve.
+        if (GameConfigManager.Instance != null)
+            GameConfigManager.Instance.OnEnemyKilled();
+
+        Destroy(gameObject);
+    }
+
+    private IEnumerator HandlePlayerDeath()
+    {
+        // Disable input scripts so the player can't drive/aim/fire while dying.
+        if (TryGetComponent(out TowerController tc)) tc.enabled = false;
+        if (TryGetComponent(out ShootingControls sc)) sc.enabled = false;
+        if (TryGetComponent(out TankFlip tf)) tf.enabled = false;
+
+        // Long, heavy death pulse on both controllers.
+        Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.7f, 0.9f, 0.5f);
+        Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.7f, 0.9f, 0.5f);
+
+        yield return new WaitForSecondsRealtime(3f);
+
+        if (GameConfigManager.Instance != null)
+            GameConfigManager.Instance.ReloadScene();
     }
 
     private void SpawnHitExplosion(Vector3 position)

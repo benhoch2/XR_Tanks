@@ -130,6 +130,14 @@ public class GameConfigManager : MonoBehaviour
     private Coroutine _debugPanelCoroutine;
     private Coroutine _spawnCoroutine;
     private Coroutine _enemyConfigCoroutine;
+    private Coroutine _winSequenceCoroutine;
+
+    // Win condition: count surviving enemy Targets (not crates, not the player).
+    // Armed once after ConfigureEnemyTankMovementWhenReady finishes and the count
+    // reflects all spawned enemies — prevents a stray early "0 enemies → win"
+    // trigger before any have actually appeared.
+    private int _enemiesAlive;
+    private bool _winConditionArmed;
 
     /// <summary>
     /// Cached lookup for the gameplay "Floor" GameObject. The cache is invalidated
@@ -193,10 +201,13 @@ public class GameConfigManager : MonoBehaviour
         _sceneStartupTriggered = false;
         Time.timeScale = 1f;
         _gameplayFloorCache = null;
+        _enemiesAlive = 0;
+        _winConditionArmed = false;
 
         StopTrackedCoroutine(ref _debugPanelCoroutine);
         StopTrackedCoroutine(ref _spawnCoroutine);
         StopTrackedCoroutine(ref _enemyConfigCoroutine);
+        StopTrackedCoroutine(ref _winSequenceCoroutine);
 
         if (_navMeshDataInstance.valid)
             _navMeshDataInstance.Remove();
@@ -558,6 +569,45 @@ public class GameConfigManager : MonoBehaviour
                 wheel.enabled = true;
             }
         }
+
+        // Arm the win condition once enemies are fully configured. Counting here
+        // (rather than during Target.Awake) avoids races between scene-reload
+        // ordering and the singleton's lifecycle.
+        _enemiesAlive = CountAliveEnemies();
+        _winConditionArmed = _enemiesAlive > 0;
+    }
+
+    private int CountAliveEnemies()
+    {
+        int alive = 0;
+        foreach (var t in FindObjectsByType<Target>(FindObjectsSortMode.None))
+        {
+            if (t == null || t.maxHitPoints <= 0) continue;
+            if (t.GetComponent<ShootingControls>() != null) continue;
+            alive++;
+        }
+        return alive;
+    }
+
+    public void OnEnemyKilled()
+    {
+        if (!_winConditionArmed)
+            return;
+
+        _enemiesAlive--;
+        if (_enemiesAlive <= 0)
+        {
+            _winConditionArmed = false;
+            _winSequenceCoroutine = StartCoroutine(WinSequenceReload());
+        }
+    }
+
+    private IEnumerator WinSequenceReload()
+    {
+        // Brief celebration window before the scene reloads so the kill effect
+        // on the final enemy can play out and the player feels the resolution.
+        yield return new WaitForSecondsRealtime(2.5f);
+        ReloadScene();
     }
 
     private void SpawnPlayerTankFallback()
