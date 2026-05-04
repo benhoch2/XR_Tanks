@@ -740,4 +740,66 @@ public class EnemyTankAI : MonoBehaviour
 
         return null;
     }
+
+#if UNITY_EDITOR
+    private void OnDrawGizmosSelected()
+    {
+        // Chase range — yellow circle on the ground.
+        Gizmos.color = new Color(1f, 0.92f, 0.016f, 0.8f);
+        DrawHorizontalCircle(transform.position, chaseRange, 32);
+
+        // Stop range — red circle on the ground.
+        Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.9f);
+        DrawHorizontalCircle(transform.position, stopRange, 32);
+
+        // Turret scan arc — green wedge centered on the turret's current forward.
+        Transform turret = _turretTransform != null ? _turretTransform : transform;
+        Vector3 turretPos = turret.position;
+        Quaternion left = Quaternion.AngleAxis(-turretScanAngle, Vector3.up);
+        Quaternion right = Quaternion.AngleAxis(turretScanAngle, Vector3.up);
+        Vector3 forward = turret.forward;
+        Gizmos.color = new Color(0.2f, 1f, 0.4f, 0.9f);
+        Gizmos.DrawLine(turretPos, turretPos + left * forward * Mathf.Max(chaseRange, 1f));
+        Gizmos.DrawLine(turretPos, turretPos + right * forward * Mathf.Max(chaseRange, 1f));
+
+        // Current NavMesh path — blue line strip.
+        if (Application.isPlaying && _agent != null && _agent.hasPath)
+        {
+            Gizmos.color = new Color(0.3f, 0.6f, 1f, 0.9f);
+            Vector3[] corners = _agent.path.corners;
+            for (int i = 0; i < corners.Length - 1; i++)
+                Gizmos.DrawLine(corners[i] + Vector3.up * 0.02f, corners[i + 1] + Vector3.up * 0.02f);
+        }
+
+        // Last shot impact — magenta sphere so you can see how off the aim correction was.
+        if (Application.isPlaying && _hasLastImpact)
+        {
+            Gizmos.color = new Color(1f, 0.2f, 1f, 0.9f);
+            Gizmos.DrawWireSphere(_lastImpactPosition, 0.08f);
+        }
+
+        // Current aim target — cyan sphere (only meaningful while a volley is active).
+        if (Application.isPlaying && _patrolScanState == PatrolScanState.Shooting)
+        {
+            Gizmos.color = new Color(0.2f, 1f, 1f, 0.9f);
+            Gizmos.DrawWireSphere(_currentAimTarget, 0.08f);
+            Gizmos.DrawLine(turretPos, _currentAimTarget);
+        }
+    }
+
+    private static void DrawHorizontalCircle(Vector3 center, float radius, int segments)
+    {
+        if (radius <= 0f || segments < 3)
+            return;
+
+        Vector3 prev = center + new Vector3(radius, 0f, 0f);
+        for (int i = 1; i <= segments; i++)
+        {
+            float angle = (i / (float)segments) * Mathf.PI * 2f;
+            Vector3 next = center + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+            Gizmos.DrawLine(prev, next);
+            prev = next;
+        }
+    }
+#endif
 }
