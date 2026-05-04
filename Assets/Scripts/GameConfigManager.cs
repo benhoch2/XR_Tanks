@@ -104,7 +104,7 @@ public class GameConfigManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
         SceneManager.sceneLoaded += OnSceneLoaded;
-        StartCoroutine(SubscribeToDebugPanel());
+        _debugPanelCoroutine = StartCoroutine(SubscribeToDebugPanel());
     }
 
     void OnDestroy()
@@ -123,6 +123,13 @@ public class GameConfigManager : MonoBehaviour
     private NavMeshDataInstance _navMeshDataInstance;
     private bool _sceneStartupTriggered;
     private GameObject _gameplayFloorCache;
+
+    // Tracked coroutine handles so a scene reload can stop the previous run before
+    // launching a fresh one. Without this, old coroutines kept running on the
+    // DontDestroyOnLoad singleton and could touch destroyed scene objects.
+    private Coroutine _debugPanelCoroutine;
+    private Coroutine _spawnCoroutine;
+    private Coroutine _enemyConfigCoroutine;
 
     /// <summary>
     /// Cached lookup for the gameplay "Floor" GameObject. The cache is invalidated
@@ -177,7 +184,7 @@ public class GameConfigManager : MonoBehaviour
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         ResetSceneStartupState();
-        StartCoroutine(SubscribeToDebugPanel());
+        _debugPanelCoroutine = StartCoroutine(SubscribeToDebugPanel());
         BeginSceneStartup();
     }
 
@@ -187,6 +194,10 @@ public class GameConfigManager : MonoBehaviour
         Time.timeScale = 1f;
         _gameplayFloorCache = null;
 
+        StopTrackedCoroutine(ref _debugPanelCoroutine);
+        StopTrackedCoroutine(ref _spawnCoroutine);
+        StopTrackedCoroutine(ref _enemyConfigCoroutine);
+
         if (_navMeshDataInstance.valid)
             _navMeshDataInstance.Remove();
 
@@ -194,6 +205,15 @@ public class GameConfigManager : MonoBehaviour
         {
             _debugInterface.OnVisibilityChangedEvent -= OnDebugPanelVisibilityChanged;
             _debugInterface = null;
+        }
+    }
+
+    private void StopTrackedCoroutine(ref Coroutine handle)
+    {
+        if (handle != null)
+        {
+            StopCoroutine(handle);
+            handle = null;
         }
     }
 
@@ -206,7 +226,7 @@ public class GameConfigManager : MonoBehaviour
         Time.timeScale = 1f;
         ConfigureMetaXRRuntime();
         FindAndApplySpawnerConfig();
-        StartCoroutine(SpawnPlayerTankNearHeadset());
+        _spawnCoroutine = StartCoroutine(SpawnPlayerTankNearHeadset());
     }
 
     private void ConfigureMetaXRRuntime()
@@ -254,7 +274,7 @@ public class GameConfigManager : MonoBehaviour
             ConfigureFallbackFloor(true, null);
             SpawnPlayerTankFallback();
             BuildRuntimeNavMesh(null);
-            StartCoroutine(ConfigureEnemyTankMovementWhenReady());
+            _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
             yield break;
         }
 
@@ -277,7 +297,7 @@ public class GameConfigManager : MonoBehaviour
         }
 
         BuildRuntimeNavMesh(room.transform);
-        StartCoroutine(ConfigureEnemyTankMovementWhenReady());
+        _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
 
         // Find the TankSpawner and spawn 5 candidates
         FindSpawnPositions tankSpawner = null;
