@@ -108,7 +108,10 @@ public class EnemyTankAI : MonoBehaviour
 
     public void ResetBehaviorState()
     {
-        if (_agent != null)
+        // ResetPath throws when the agent is disabled or off-mesh. Awake() calls this
+        // before GameConfigManager.ConfigureEnemyTankMovementWhenReady() has enabled
+        // the agent and warped it onto the runtime NavMesh, so guard accordingly.
+        if (_agent != null && _agent.enabled && _agent.isOnNavMesh)
             _agent.ResetPath();
 
         _nextRepathTime = 0f;
@@ -269,6 +272,16 @@ public class EnemyTankAI : MonoBehaviour
 
     private void UpdateShootingVolley()
     {
+        // Honor the testing toggle mid-volley: if shooting is disabled while a volley is
+        // already in flight, abort cleanly instead of continuing to fire.
+        if (GameConfigManager.Instance != null && !GameConfigManager.Instance.enemyShootingEnabled)
+        {
+            _awaitingImpact = false;
+            TransitionShootingPhase(ShootingPhase.Done);
+            _patrolScanState = PatrolScanState.PickDirection;
+            return;
+        }
+
         // Refresh aim target to player's current position each frame (so they're tracked if moving).
         if (_player != null)
             _currentAimTarget = _player.position;
@@ -498,15 +511,14 @@ public class EnemyTankAI : MonoBehaviour
         // Walk all hits in distance order so our own colliders (which almost always sit
         // between the turret and the player) don't masquerade as "LOS clear". First
         // non-self hit decides: player → clear, anything else (MRUK wall etc.) → blocked.
+        // If we never see the player explicitly (cast missed them entirely or only self
+        // colliders were in range), default to "no LOS" so we don't fire blind.
         RaycastHit[] hits = Physics.RaycastAll(
             originPos,
             toPlayer / dist,
             dist,
             Physics.DefaultRaycastLayers,
             QueryTriggerInteraction.Ignore);
-
-        if (hits.Length == 0)
-            return true;
 
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
@@ -522,7 +534,7 @@ public class EnemyTankAI : MonoBehaviour
             return t == _player || t.IsChildOf(_player);
         }
 
-        return true;
+        return false;
     }
 
     private bool AimTurretYawAtWorldPosition(Vector3 worldPos)

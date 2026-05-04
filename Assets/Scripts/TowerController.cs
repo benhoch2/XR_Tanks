@@ -61,7 +61,14 @@ public class TowerController : MonoBehaviour
     void RotateTower(float input)
     {
         if (Mathf.Abs(input) > 0.01f)
-            towerBase.transform.Rotate(Vector3.up, input * rotationSpeed * Time.deltaTime, Space.World);
+        {
+            // Rotate around the parent's (tank's) local Y so the turret stays level
+            // with the tank body if the tank pitches or rolls (driving over an obstacle,
+            // mid-flip, etc.).
+            Vector3 localEuler = towerBase.transform.localEulerAngles;
+            localEuler.y += input * rotationSpeed * Time.deltaTime;
+            towerBase.transform.localEulerAngles = localEuler;
+        }
     }
 
     void TiltTower(float input)

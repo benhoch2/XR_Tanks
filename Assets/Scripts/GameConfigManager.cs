@@ -58,6 +58,14 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Game Config")]
     public bool pauseWhenConfigMenuOpen = true;
 
+    [Header("NavMesh")]
+    [Tooltip("Layers to include when building the runtime NavMesh from MRUK colliders. " +
+             "Default = the Default layer only. If obstacle prefabs are placed on Walls, " +
+             "Obstacles, or any other layer, add those layers here or they'll be missing " +
+             "from the NavMesh and enemies will walk through them.")]
+    [SerializeField]
+    private LayerMask navMeshLayerMask = 1; // bit 0 = Default layer
+
     [Header("Testing")]
     [DebugMember(Category = "Testing")]
     public bool enemyShootingEnabled = true;
@@ -370,7 +378,7 @@ public class GameConfigManager : MonoBehaviour
     private void BuildRuntimeNavMesh(Transform sourceRoot)
     {
         List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
-        NavMeshBuilder.CollectSources(sourceRoot, LayerMask.GetMask("Default"), NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
+        NavMeshBuilder.CollectSources(sourceRoot, navMeshLayerMask, NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
 
         if (sources.Count == 0)
         {
