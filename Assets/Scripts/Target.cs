@@ -68,6 +68,12 @@ public class Target : MonoBehaviour
             // Instant kill path (crates or projectile with 0 damage)
             if (maxHitPoints <= 0 || damage <= 0)
             {
+                // If this is a crate (has a CrateReward), let it roll and apply its outcome
+                // to the shooter before we destroy it. Player projectiles set proj.shooter to
+                // the player tank root, which carries both ShootingControls and Target.
+                if (proj.shooter != null && TryGetComponent(out CrateReward reward))
+                    reward.RollAndApply(proj.shooter.gameObject, hitPoint);
+
                 SpawnEffect(effectDuration);
                 Destroy(gameObject);
                 return;
@@ -225,5 +231,18 @@ public class Target : MonoBehaviour
     {
         if (healthBar == null || maxHitPoints <= 0) return;
         healthBar.power = Mathf.Clamp01((float)currentHitPoints / maxHitPoints);
+    }
+
+    /// <summary>
+    /// Restores up to <paramref name="amount"/> hit points, capped at <see cref="maxHitPoints"/>.
+    /// Returns true if any healing actually applied (so callers can suppress UI feedback when
+    /// the target is already at full health).
+    /// </summary>
+    public bool Heal(int amount)
+    {
+        if (amount <= 0 || maxHitPoints <= 0 || currentHitPoints >= maxHitPoints) return false;
+        currentHitPoints = Mathf.Min(currentHitPoints + amount, maxHitPoints);
+        UpdateHealthBar();
+        return true;
     }
 }

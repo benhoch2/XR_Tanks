@@ -8,6 +8,12 @@ public class ShootingControls : MonoBehaviour
     [SerializeField] private GameObject[] projectilePrefabs;
     [SerializeField] private Transform firePoint;
 
+    [Header("Inventory")]
+    [Tooltip("Per-slot unlocked state at scene start. Length should match projectilePrefabs. " +
+             "If the array is empty or shorter, missing slots default to unlocked (back-compat). " +
+             "Player tanks set this to [true,false,...] so projectile types must be earned from crates.")]
+    [SerializeField] private bool[] unlockedAtStart;
+
     [Header("Firing")]
     [SerializeField] private float minProjectileVelocity = 10f;
     [SerializeField] private float maxProjectileVelocity = 40f;
@@ -28,6 +34,11 @@ public class ShootingControls : MonoBehaviour
 
     private int currentProjectileIndex = 0;
     private GameObject currentPreview;
+
+    // Per-slot unlock state, initialized from unlockedAtStart in Start. Forward-compat note:
+    // when we move to depletable ammo, swap this for int[] _ammo and treat >0 as unlocked;
+    // the public IsUnlocked / TryUnlock surface stays the same shape for external callers.
+    private bool[] _unlocked;
 
     private float chargeStartTime = 0f;
     private bool isCharging = false;
@@ -51,6 +62,56 @@ public class ShootingControls : MonoBehaviour
         }
 
         if (powerBar != null) powerBar.power = 0f;
+
+        InitInventory();
+    }
+
+    private void InitInventory()
+    {
+        int count = projectilePrefabs != null ? projectilePrefabs.Length : 0;
+        _unlocked = new bool[count];
+        for (int i = 0; i < count; i++)
+        {
+            // If unlockedAtStart isn't configured (or is shorter), default missing slots to
+            // unlocked so older prefabs without the field keep working.
+            _unlocked[i] = (unlockedAtStart == null || i >= unlockedAtStart.Length) || unlockedAtStart[i];
+        }
+
+        if (count > 0 && (currentProjectileIndex < 0 || currentProjectileIndex >= count || !_unlocked[currentProjectileIndex]))
+            currentProjectileIndex = FirstUnlocked();
+    }
+
+    public bool IsUnlocked(int index)
+    {
+        return _unlocked != null && index >= 0 && index < _unlocked.Length && _unlocked[index];
+    }
+
+    /// <summary>
+    /// Unlocks the projectile slot at <paramref name="index"/>. Returns true if the slot
+    /// was previously locked and is now unlocked (so callers can decide whether to surface
+    /// "got new ammo" feedback). When <paramref name="autoSwitch"/> is true and the unlock
+    /// was newly granted, the active projectile switches to it and the preview spawns.
+    /// </summary>
+    public bool TryUnlock(int index, bool autoSwitch)
+    {
+        if (_unlocked == null || index < 0 || index >= _unlocked.Length) return false;
+        if (_unlocked[index]) return false;
+
+        _unlocked[index] = true;
+        if (autoSwitch)
+        {
+            currentProjectileIndex = index;
+            ShowPreview();
+        }
+        return true;
+    }
+
+    private int FirstUnlocked()
+    {
+        if (_unlocked == null) return 0;
+        for (int i = 0; i < _unlocked.Length; i++)
+            if (_unlocked[i]) return i;
+        return 0;
     }
 
     void OnEnable()
@@ -160,9 +221,21 @@ public class ShootingControls : MonoBehaviour
     private void CycleProjectile()
     {
         if (projectilePrefabs == null || projectilePrefabs.Length == 0) return;
+        if (_unlocked == null || _unlocked.Length != projectilePrefabs.Length) InitInventory();
 
-        currentProjectileIndex = (currentProjectileIndex + 1) % projectilePrefabs.Length;
-        ShowPreview();
+        // Walk forward from the current slot until we hit the next unlocked one. If only one
+        // slot is unlocked we fall back to the original index after a full loop (no-op cycle).
+        int len = projectilePrefabs.Length;
+        for (int step = 1; step <= len; step++)
+        {
+            int candidate = (currentProjectileIndex + step) % len;
+            if (_unlocked[candidate])
+            {
+                currentProjectileIndex = candidate;
+                ShowPreview();
+                return;
+            }
+        }
     }
 
     private void ShowPreview()

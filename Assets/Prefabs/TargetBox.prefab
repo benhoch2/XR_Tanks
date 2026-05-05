@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 4573048229967014476}
   - component: {fileID: 611297286558026382}
   - component: {fileID: 8457690878693924083}
+  - component: {fileID: 6000000000000000001}
   m_Layer: 0
   m_Name: TargetBox
   m_TagString: Untagged
@@ -91,6 +92,29 @@ MonoBehaviour:
   - {fileID: 9111320563476075686, guid: c6fb71e58ec36784687d958bc39de3f2, type: 3}
   - {fileID: 3352391191284423565, guid: 9571e0e1b1e65834cbba759493c171d3, type: 3}
   effectDuration: 5
+--- !u!114 &6000000000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2817913665691089265}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 930b0bbb6161ec740b61e29123b1d075, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  pctNothing: 0.5
+  pctBlueAmmo: 0.15
+  pctGreenAmmo: 0.15
+  pctRedAmmo: 0.15
+  pctHealth: 0.05
+  blueIndex: 1
+  greenIndex: 2
+  redIndex: 3
+  healAmount: 25
+  rewardLabelPrefab: {fileID: 0}
+  autoSwitchOnUnlock: 1
 --- !u!1001 &5658832770688220529
 PrefabInstance:
   m_ObjectHideFlags: 0

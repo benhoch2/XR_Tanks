@@ -459,6 +459,11 @@ MonoBehaviour:
   - {fileID: 1720991040967052277, guid: cdec6b5e2d8dd28408f58872e272cf69, type: 3}
   - {fileID: 1720991040967052277, guid: fef8d5dede12a904098badb431b3842b, type: 3}
   firePoint: {fileID: 2415187493405424666}
+  unlockedAtStart:
+  - 1
+  - 0
+  - 0
+  - 0
   minProjectileVelocity: 2
   maxProjectileVelocity: 20
   maxChargeTime: 2
