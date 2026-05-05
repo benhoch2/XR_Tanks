@@ -19,9 +19,17 @@ public class TowerController : MonoBehaviour
              "they hold B to flip back upright.")]
     [SerializeField] private float maxDriveTiltDegrees = 60f;
 
+    [Header("Knockback")]
+    [Tooltip("Effective mass for hit-impact knockback. Higher = less slide from the same hit.")]
+    [SerializeField] private float mass = 1f;
+
+    [Tooltip("How quickly knockback velocity decays back to zero (per second). Higher = stops sooner.")]
+    [SerializeField] private float knockbackDamping = 6f;
+
     private InputAction moveAction;
     private InputAction aimAction;
     private float currentTilt = 0f;
+    private Vector3 _knockbackVelocity;
 
     void OnEnable()
     {
@@ -54,6 +62,38 @@ public class TowerController : MonoBehaviour
         MoveTank(moveInput, turnInput);
         RotateTower(rotationInput);
         TiltTower(tiltInput);
+
+        ApplyKnockbackStep();
+    }
+
+    /// <summary>
+    /// Adds a knockback impulse (world-space). Horizontal-only: the player tank slides on
+    /// the floor instead of launching upward. Mass divides the impulse so a heavier player
+    /// would slide less from the same hit — currently only relevant if the field is tuned.
+    /// </summary>
+    public void ApplyKnockback(Vector3 worldImpulse)
+    {
+        Vector3 horizImpulse = new Vector3(worldImpulse.x, 0f, worldImpulse.z);
+        if (horizImpulse.sqrMagnitude < 0.0001f)
+            return;
+
+        float effectiveMass = Mathf.Max(0.001f, mass);
+        _knockbackVelocity += horizImpulse / effectiveMass;
+    }
+
+    private void ApplyKnockbackStep()
+    {
+        if (_knockbackVelocity.sqrMagnitude < 0.0001f)
+        {
+            _knockbackVelocity = Vector3.zero;
+            return;
+        }
+
+        transform.position += _knockbackVelocity * Time.deltaTime;
+        _knockbackVelocity = Vector3.Lerp(
+            _knockbackVelocity,
+            Vector3.zero,
+            Mathf.Clamp01(knockbackDamping * Time.deltaTime));
     }
 
     void MoveTank(float moveInput, float turnInput)

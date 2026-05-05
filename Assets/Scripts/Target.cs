@@ -21,6 +21,10 @@ public class Target : MonoBehaviour
     [SerializeField] private GameObject hitExplosionPrefab;
     [Tooltip("How long the hit explosion lingers before being destroyed.")]
     [SerializeField] private float hitExplosionDuration = 1.5f;
+    [Tooltip("Multiplier applied to the projectile's velocity at impact to derive the knockback impulse. " +
+             "0 disables knockback. EnemyTankAI / TowerController each divide the result by their own mass " +
+             "so a Heavy tank slides less than a Light tank from the same hit.")]
+    [SerializeField] private float knockbackImpulseScale = 0.1f;
 
     // Shared buffer for the per-hit ParticleSystem walk in OnNonLethalHit.
     // Reused across all Target instances on the main thread to avoid per-hit allocations.
@@ -39,16 +43,15 @@ public class Target : MonoBehaviour
         {
             int damage = proj.damage;
 
+            // Pull the projectile's velocity BEFORE Destroy schedules it for cleanup,
+            // so we can derive a knockback impulse from the actual incoming momentum.
+            ApplyImpactKnockback(hitObject);
+
             // Teleport balls own their own lifetime (deferred-teleport timer) and must survive
             // enemy bounces. Every other type gets destroyed on contact.
             if (proj.projectileType != ProjectileType.Teleport)
                 Destroy(hitObject);
 
-            // Shared per-hit feedback runs regardless of lethality. Note: there is
-            // no agent-displacement "knockback" — for NavMeshAgent enemies the agent
-            // overrides transform each frame, and applying agent.Move() in a single
-            // tick visibly read as a teleport at MR room scale. The hit-explosion
-            // particle and PowerBar drop already communicate the hit clearly.
             SpawnHitExplosion(hitPoint);
             TryFirePlayerHitConfirmedHaptic(proj);
 
@@ -125,6 +128,23 @@ public class Target : MonoBehaviour
         if (hitExplosionPrefab == null) return;
         GameObject effect = Instantiate(hitExplosionPrefab, position, Quaternion.identity);
         Destroy(effect, hitExplosionDuration);
+    }
+
+    private void ApplyImpactKnockback(GameObject projectileObj)
+    {
+        if (knockbackImpulseScale <= 0f || projectileObj == null)
+            return;
+
+        Rigidbody projRb = projectileObj.GetComponent<Rigidbody>();
+        if (projRb == null)
+            return;
+
+        Vector3 impulse = projRb.linearVelocity * knockbackImpulseScale;
+
+        if (TryGetComponent(out EnemyTankAI enemy))
+            enemy.ApplyKnockback(impulse);
+        else if (TryGetComponent(out TowerController player))
+            player.ApplyKnockback(impulse);
     }
 
     private void TryFirePlayerHitConfirmedHaptic(Projectile proj)

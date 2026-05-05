@@ -81,6 +81,14 @@ public class EnemyTankAI : MonoBehaviour
              "Lower = fires more often. Ignored by PatrolScan tanks (which fire whenever a scan ends).")]
     [SerializeField] private float chaseWanderVolleyCooldown = 3f;
 
+    [Header("Knockback")]
+    [Tooltip("Effective mass for hit-impact knockback. Higher = less knockback from the same impulse. " +
+             "The Heavy variant overrides this to be noticeably tankier than Light/Medium.")]
+    [SerializeField] private float mass = 1f;
+
+    [Tooltip("How quickly knockback velocity decays back to zero (per second). Higher = stops sooner.")]
+    [SerializeField] private float knockbackDamping = 6f;
+
     private NavMeshAgent _agent;
     private Transform _player;
     private Vector3 _homePosition;
@@ -109,6 +117,10 @@ public class EnemyTankAI : MonoBehaviour
     // ChaseWander shooting bookkeeping. Reused for nothing else.
     private bool _chaseWanderInVolley;
     private float _nextChaseWanderShotTime;
+
+    // Knockback velocity, integrated per-frame and decayed exponentially. Driven via
+    // agent.Move so the agent's own pathing follows the slide instead of fighting it.
+    private Vector3 _knockbackVelocity;
 
     private void Awake()
     {
@@ -160,6 +172,8 @@ public class EnemyTankAI : MonoBehaviour
             _lastBehaviorMode = behaviorMode;
             ResetBehaviorState();
         }
+
+        ApplyKnockbackStep();
 
         switch (behaviorMode)
         {
@@ -586,31 +600,76 @@ public class EnemyTankAI : MonoBehaviour
         if (toTargetHoriz.sqrMagnitude < 0.0001f)
             return true;
 
-        // Yaw — point the turret horizontally at the target.
-        float desiredYaw = Mathf.Atan2(toTargetHoriz.x, toTargetHoriz.z) * Mathf.Rad2Deg;
-
-        // Pitch — match the ballistic launch angle of the next shot so the barrel
-        // visually tracks the firing arc instead of staying flat regardless of
-        // elevation. Re-runs the same solver FireShot uses so the visual matches
-        // the actual launch velocity.
+        // Re-run the same ballistic solver FireShot will use so the barrel visibly
+        // tracks the actual firing arc.
         float horizDist = toTargetHoriz.magnitude;
         Vector3 firePos = GetFirePosition();
         float launchSpeed = ComputeLaunchSpeed(horizDist);
         SolveBallistic(firePos, worldPos, launchSpeed, out Vector3 launchVelocity);
         launchVelocity = EnforceMinElevation(launchVelocity);
-        float launchHoriz = new Vector2(launchVelocity.x, launchVelocity.z).magnitude;
-        float desiredPitch = Mathf.Atan2(launchVelocity.y, launchHoriz) * Mathf.Rad2Deg;
 
-        Vector3 euler = _turretTransform.eulerAngles;
-        float newYaw = Mathf.MoveTowardsAngle(euler.y, desiredYaw, aimYawSpeedDegPerSec * Time.deltaTime);
-        float newPitch = Mathf.MoveTowardsAngle(euler.x, desiredPitch, aimYawSpeedDegPerSec * Time.deltaTime);
-        euler.y = newYaw;
-        euler.x = newPitch;
-        _turretTransform.eulerAngles = euler;
+        Vector3 launchDir = launchVelocity.sqrMagnitude > 0.0001f
+            ? launchVelocity.normalized
+            : (worldPos - _turretTransform.position).normalized;
 
-        bool yawSettled = Mathf.Abs(Mathf.DeltaAngle(newYaw, desiredYaw)) <= aimSettleThresholdDeg;
-        bool pitchSettled = Mathf.Abs(Mathf.DeltaAngle(newPitch, desiredPitch)) <= aimSettleThresholdDeg;
-        return yawSettled && pitchSettled;
+        // Aim must be done in the body's local frame: the previous implementation
+        // drove pitch via world eulerAngles.x, which only behaves as "barrel up/down"
+        // when the body is yawed to face world +Z. As soon as the tank turned, world
+        // Euler X started mixing roll into the turret and the cannon visually drifted
+        // off the firing arc. Composing a target rotation from LookRotation and then
+        // expressing it in the parent's local frame keeps the pivot axes aligned with
+        // the chassis no matter which way the body is facing — same approach the
+        // player turret takes via local Euler in TowerController.
+        Quaternion desiredWorldRot = Quaternion.LookRotation(launchDir, Vector3.up);
+        Transform parent = _turretTransform.parent != null ? _turretTransform.parent : transform;
+        Quaternion desiredLocalRot = Quaternion.Inverse(parent.rotation) * desiredWorldRot;
+
+        _turretTransform.localRotation = Quaternion.RotateTowards(
+            _turretTransform.localRotation,
+            desiredLocalRot,
+            aimYawSpeedDegPerSec * Time.deltaTime);
+
+        return Quaternion.Angle(_turretTransform.localRotation, desiredLocalRot) <= aimSettleThresholdDeg;
+    }
+
+    /// <summary>
+    /// Adds a knockback impulse (world-space) to this tank. Mass divides the impulse so
+    /// heavier variants slide less from the same hit. Only the horizontal component is
+    /// kept — tanks slide on the navmesh, they don't launch into the air.
+    /// </summary>
+    public void ApplyKnockback(Vector3 worldImpulse)
+    {
+        Vector3 horizImpulse = new Vector3(worldImpulse.x, 0f, worldImpulse.z);
+        if (horizImpulse.sqrMagnitude < 0.0001f)
+            return;
+
+        float effectiveMass = Mathf.Max(0.001f, mass);
+        _knockbackVelocity += horizImpulse / effectiveMass;
+    }
+
+    private void ApplyKnockbackStep()
+    {
+        if (_knockbackVelocity.sqrMagnitude < 0.0001f)
+        {
+            _knockbackVelocity = Vector3.zero;
+            return;
+        }
+
+        Vector3 step = _knockbackVelocity * Time.deltaTime;
+        // agent.Move integrates collision against the navmesh so the slide stops at walls
+        // and follows the floor. Direct rigidbody impulses don't survive the agent's
+        // per-frame transform overwrite — see CLAUDE.md note.
+        if (_agent != null && _agent.enabled && _agent.isOnNavMesh)
+            _agent.Move(step);
+        else
+            transform.position += step;
+
+        // Exponential decay: roughly velocity *= e^(-damping*dt). Vector3.Lerp toward
+        // zero with a clamped t gives the same shape and is stable at low frame rates.
+        _knockbackVelocity = Vector3.Lerp(
+            _knockbackVelocity,
+            Vector3.zero,
+            Mathf.Clamp01(knockbackDamping * Time.deltaTime));
     }
 
     private void DriveLikeTank(Vector3 desiredDirection)
