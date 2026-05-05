@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class PowerBar : MonoBehaviour
 {
-    [Range  (0f, 1f)]
+    [Range(0f, 1f)]
     public float power = 0.5f;
 
     [SerializeField]
@@ -57,7 +57,15 @@ public class PowerBar : MonoBehaviour
         // horizontal direction from this object to camera
         Vector3 dir = cam.transform.position - transform.position;
         dir.y = 0f;
-        if (dir.sqrMagnitude < 0.0001f) return;
+        if (dir.sqrMagnitude < 0.0001f)
+        {
+            // Camera is directly above/below the bar (player crouched to bar height, etc.).
+            // Fall back to facing opposite the camera's forward so the bar still ends up
+            // pointed at the user instead of frozen in its previous orientation.
+            dir = -cam.transform.forward;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.0001f) return;
+        }
 
         // Build rotation so Z faces camera, then rotate -90deg around Y so local +X faces camera.
         Quaternion look = Quaternion.LookRotation(dir.normalized, Vector3.up) * Quaternion.Euler(0f, -90f, 0f);

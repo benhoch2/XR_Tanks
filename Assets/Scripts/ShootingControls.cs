@@ -31,9 +31,9 @@ public class ShootingControls : MonoBehaviour
 
     private float chargeStartTime = 0f;
     private bool isCharging = false;
+    private bool fullChargeNotified = false;
 
     private bool lastTriggerPressed = false;
-    private bool lastAButtonPressed = false;
 
     private GameObject CurrentPrefab =>
         (projectilePrefabs != null && projectilePrefabs.Length > 0)
@@ -73,31 +73,24 @@ public class ShootingControls : MonoBehaviour
 
     void Update()
     {
-        bool triggerPressed = false;
-        bool triggerReleased = false;
-        bool aButtonPressed = false;
-
         float triggerValue = fireAction?.ReadValue<float>() ?? 0f;
         bool isPressedNow = triggerValue > 0.1f;
-        triggerPressed = isPressedNow && !lastTriggerPressed;
-        triggerReleased = !isPressedNow && lastTriggerPressed;
+        bool triggerPressed = isPressedNow && !lastTriggerPressed;
+        bool triggerReleased = !isPressedNow && lastTriggerPressed;
         lastTriggerPressed = isPressedNow;
 
-        bool aValue = cycleProjectileAction?.WasPerformedThisFrame() ?? false;
-        aButtonPressed = aValue && !lastAButtonPressed;
-        lastAButtonPressed = aValue;
+        // WasPerformedThisFrame is already a one-frame pulse, no edge bookkeeping needed.
+        bool aButtonPressed = cycleProjectileAction?.WasPerformedThisFrame() ?? false;
 
-        // Cycle projectile type
         if (aButtonPressed)
-        {
             CycleProjectile();
-        }
 
         // Start charging
         if (triggerPressed)
         {
             chargeStartTime = Time.time;
             isCharging = true;
+            fullChargeNotified = false;
             if (powerBar != null) powerBar.power = 0f;
         }
 
@@ -108,6 +101,14 @@ public class ShootingControls : MonoBehaviour
             float normalized = (maxChargeTime > 0f) ? (chargeDurationNow / maxChargeTime) : 1f;
             normalized = Mathf.Clamp01(normalized);
             if (powerBar != null) powerBar.power = normalized;
+
+            // Single haptic ping when the charge bar first hits 100% so the player knows
+            // they're at max power without looking at the bar.
+            if (!fullChargeNotified && normalized >= 1f)
+            {
+                fullChargeNotified = true;
+                Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.3f, 0.5f, 0.06f);
+            }
         }
 
         // Fire
@@ -127,6 +128,9 @@ public class ShootingControls : MonoBehaviour
         GameObject prefab = CurrentPrefab;
         if (prefab != null && firePoint != null)
         {
+            // Crisper "thunk" pulse on fire. Stronger than the charge ping.
+            Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.5f, 0.8f, 0.1f);
+
             GameObject projectile = Instantiate(prefab, firePoint.position, firePoint.rotation);
 
             Projectile proj = projectile.GetComponent<Projectile>();
@@ -158,8 +162,6 @@ public class ShootingControls : MonoBehaviour
         if (projectilePrefabs == null || projectilePrefabs.Length == 0) return;
 
         currentProjectileIndex = (currentProjectileIndex + 1) % projectilePrefabs.Length;
-        Debug.Log($"Projectile switched to: {CurrentPrefab.name} ({currentProjectileIndex + 1}/{projectilePrefabs.Length})");
-
         ShowPreview();
     }
 

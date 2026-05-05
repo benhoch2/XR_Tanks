@@ -351,6 +351,19 @@ Transform:
   - {fileID: 1050327036}
   m_Father: {fileID: 1851785679}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!134 &319999970
+PhysicsMaterial:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  serializedVersion: 2
+  m_DynamicFriction: 0.6
+  m_StaticFriction: 0.6
+  m_Bounciness: 0
+  m_FrictionCombine: 0
+  m_BounceCombine: 0
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -1651,7 +1664,6 @@ GameObject:
   - component: {fileID: 1438001025}
   - component: {fileID: 1438001024}
   - component: {fileID: 1438001023}
-  - component: {fileID: 1438001026}
   m_Layer: 0
   m_Name: '[BuildingBlock] Effect Mesh'
   m_TagString: Untagged
@@ -1716,18 +1728,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1438001026
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1438001022}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0e617927a7d7ee6408b47225d9bae502, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &1464069284
 GameObject:
   m_ObjectHideFlags: 0
@@ -1759,7 +1759,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   SpawnOnStart: 1
-  SpawnObject: {fileID: 1328997221997902240, guid: 0efd2192e5d78f549807be837211fb0d,
+  SpawnObject: {fileID: 7188619540205422496, guid: 7a186b8022c37eb4da6ec0a1e19b328e,
     type: 3}
   SpawnAmount: 5
   MaxIterations: 1000
@@ -1915,10 +1915,12 @@ MonoBehaviour:
   projectileMinSpeed: 1
   projectileMaxSpeed: 20
   powerUpDuration: 2
-  enemyMoveSpeed: 0.5
-  enemyChaseRange: 4
-  enemyStopRange: 1.25
-  enemyHeightOffset: 0.12
+  pauseWhenConfigMenuOpen: 1
+  navMeshLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  enemyShootingEnabled: 1
+  playerInvulnerable: 0
   ctrlRTrigger: Fire (hold to charge)
   ctrlA: Cycle projectile
   ctrlB: Reset / flip tank
@@ -1968,7 +1970,7 @@ MeshCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1939702763}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 319999970}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0

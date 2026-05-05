@@ -55,8 +55,12 @@ public class TankFlip : MonoBehaviour
 
     private void PerformResetAndBounce()
     {
-        // Reset rotation to zero
-        transform.rotation = Quaternion.identity;
+        // Both-controller pulse so the reset feels weighty. Triggered once when the
+        // 3-second hold completes (not while the timer is counting up).
+        Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.4f, 0.7f, 0.18f);
+        Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.4f, 0.7f, 0.18f);
+
+        // Reset rotation to zero (relative to parent if any).
         transform.localRotation = Quaternion.identity;
 
         // Ensure we have Rigidbody reference

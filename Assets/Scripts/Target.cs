@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.AI;
 
 public class Target : MonoBehaviour
 {
@@ -22,11 +21,14 @@ public class Target : MonoBehaviour
     [SerializeField] private GameObject hitExplosionPrefab;
     [Tooltip("How long the hit explosion lingers before being destroyed.")]
     [SerializeField] private float hitExplosionDuration = 1.5f;
-    [Tooltip("Knockback displacement (meters) applied to this target on every hit. Primarily matters for NavMeshAgent-driven enemies whose physics is overridden by the agent.")]
-    [SerializeField] private float knockbackDistance = 0.15f;
+    [Tooltip("Multiplier applied to the projectile's velocity at impact to derive the knockback impulse. " +
+             "0 disables knockback. EnemyTankAI / TowerController each divide the result by their own mass " +
+             "so a Heavy tank slides less than a Light tank from the same hit.")]
+    [SerializeField] private float knockbackImpulseScale = 0.1f;
 
-    private NavMeshAgent _cachedAgent;
-    private bool _agentLookedUp;
+    // Shared buffer for the per-hit ParticleSystem walk in OnNonLethalHit.
+    // Reused across all Target instances on the main thread to avoid per-hit allocations.
+    private static readonly List<ParticleSystem> _hitParticleBuffer = new List<ParticleSystem>(8);
 
     private void Awake()
     {
@@ -34,21 +36,24 @@ public class Target : MonoBehaviour
         UpdateHealthBar();
     }
 
-    private void HandleHit(GameObject hitObject, Vector3 hitPoint, Vector3 hitDirection)
+    private void HandleHit(GameObject hitObject, Vector3 hitPoint)
     {
         Projectile proj = hitObject.GetComponent<Projectile>();
         if (proj != null)
         {
             int damage = proj.damage;
 
+            // Pull the projectile's velocity BEFORE Destroy schedules it for cleanup,
+            // so we can derive a knockback impulse from the actual incoming momentum.
+            ApplyImpactKnockback(hitObject);
+
             // Teleport balls own their own lifetime (deferred-teleport timer) and must survive
             // enemy bounces. Every other type gets destroyed on contact.
             if (proj.projectileType != ProjectileType.Teleport)
                 Destroy(hitObject);
 
-            // Shared per-hit feedback (explosion + knockback) runs regardless of lethality.
             SpawnHitExplosion(hitPoint);
-            ApplyKnockback(hitDirection);
+            TryFirePlayerHitConfirmedHaptic(proj);
 
             // Player-invulnerability test toggle: show feedback but skip damage entirely.
             // Detection: ShootingControls only lives on the player tank.
@@ -68,15 +73,14 @@ public class Target : MonoBehaviour
                 return;
             }
 
-            // Health-based path (enemies)
+            // Health-based path (enemies and the player tank).
             currentHitPoints -= damage;
-            Debug.Log($"{gameObject.name} hit for {damage} damage. HP: {currentHitPoints}/{maxHitPoints}");
             UpdateHealthBar();
 
             if (currentHitPoints <= 0)
             {
                 SpawnEffect(effectDuration);
-                Destroy(gameObject);
+                HandleLethalHit();
             }
             else
             {
@@ -86,6 +90,39 @@ public class Target : MonoBehaviour
         }
     }
 
+    private void HandleLethalHit()
+    {
+        // The player tank carries ShootingControls; enemies don't.
+        if (GetComponent<ShootingControls>() != null)
+        {
+            StartCoroutine(HandlePlayerDeath());
+            return;
+        }
+
+        // Enemy died — notify the manager so the win condition can resolve.
+        if (GameConfigManager.Instance != null)
+            GameConfigManager.Instance.OnEnemyKilled();
+
+        Destroy(gameObject);
+    }
+
+    private IEnumerator HandlePlayerDeath()
+    {
+        // Disable input scripts so the player can't drive/aim/fire while dying.
+        if (TryGetComponent(out TowerController tc)) tc.enabled = false;
+        if (TryGetComponent(out ShootingControls sc)) sc.enabled = false;
+        if (TryGetComponent(out TankFlip tf)) tf.enabled = false;
+
+        // Long, heavy death pulse on both controllers.
+        Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.7f, 0.9f, 0.5f);
+        Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.7f, 0.9f, 0.5f);
+
+        yield return new WaitForSecondsRealtime(3f);
+
+        if (GameConfigManager.Instance != null)
+            GameConfigManager.Instance.ReloadScene();
+    }
+
     private void SpawnHitExplosion(Vector3 position)
     {
         if (hitExplosionPrefab == null) return;
@@ -93,26 +130,38 @@ public class Target : MonoBehaviour
         Destroy(effect, hitExplosionDuration);
     }
 
-    private void ApplyKnockback(Vector3 worldDirection)
+    private void ApplyImpactKnockback(GameObject projectileObj)
     {
-        if (knockbackDistance <= 0f) return;
+        if (knockbackImpulseScale <= 0f || projectileObj == null)
+            return;
 
-        worldDirection.y = 0f;
-        if (worldDirection.sqrMagnitude < 0.0001f) return;
+        Rigidbody projRb = projectileObj.GetComponent<Rigidbody>();
+        if (projRb == null)
+            return;
 
-        if (!_agentLookedUp)
-        {
-            _cachedAgent = GetComponent<NavMeshAgent>();
-            _agentLookedUp = true;
-        }
+        Vector3 impulse = projRb.linearVelocity * knockbackImpulseScale;
 
-        // NavMeshAgent overrides transform each frame, so physics impulses on the Rigidbody
-        // would be lost. Apply the knockback as a direct agent displacement instead.
-        if (_cachedAgent != null && _cachedAgent.enabled && _cachedAgent.isOnNavMesh)
-        {
-            _cachedAgent.Move(worldDirection.normalized * knockbackDistance);
-        }
-        // For non-agent targets (player), the existing rigidbody collision impulse already handles knockback.
+        if (TryGetComponent(out EnemyTankAI enemy))
+            enemy.ApplyKnockback(impulse);
+        else if (TryGetComponent(out TowerController player))
+            player.ApplyKnockback(impulse);
+    }
+
+    private void TryFirePlayerHitConfirmedHaptic(Projectile proj)
+    {
+        // Only ping the player when their own shot connects with another Target
+        // (not when an enemy's shot lands, and not when the player gets hit).
+        if (proj == null || proj.shooter == null)
+            return;
+
+        if (GetComponent<ShootingControls>() != null)
+            return; // we ARE the player; no self hit-confirm
+
+        ShootingControls shooterControls = proj.shooter.GetComponent<ShootingControls>();
+        if (shooterControls == null)
+            return; // shooter isn't the player
+
+        Haptics.Pulse(shooterControls, OVRInput.Controller.RTouch, 0.6f, 0.7f, 0.07f);
     }
 
     private void SpawnEffect(float duration)
@@ -141,12 +190,16 @@ public class Target : MonoBehaviour
                 GameObject effect = Instantiate(prefab, hitPoint, Quaternion.identity);
                 effect.transform.localScale *= 0.3f;
 
-                // Force all particle systems to respect the transform scale
-                foreach (var ps in effect.GetComponentsInChildren<ParticleSystem>())
+                // Force all particle systems to respect the transform scale.
+                // Uses the non-allocating List overload so we don't pay an
+                // array-allocation cost on every non-lethal hit.
+                effect.GetComponentsInChildren(_hitParticleBuffer);
+                for (int i = 0; i < _hitParticleBuffer.Count; i++)
                 {
-                    var main = ps.main;
+                    var main = _hitParticleBuffer[i].main;
                     main.scalingMode = ParticleSystemScalingMode.Hierarchy;
                 }
+                _hitParticleBuffer.Clear();
 
                 Destroy(effect, effectDuration * 0.5f);
             }
@@ -158,29 +211,14 @@ public class Target : MonoBehaviour
 		Vector3 contactPoint = collision.contactCount > 0
 			? collision.GetContact(0).point
 			: transform.position;
-
-		// Prefer the projectile's own travel direction (collision.relativeVelocity flips sign
-		// in awkward ways when a NavMeshAgent is involved).
-		Vector3 hitDir = Vector3.zero;
-		if (collision.rigidbody != null)
-			hitDir = collision.rigidbody.linearVelocity;
-		if (hitDir.sqrMagnitude < 0.0001f)
-			hitDir = -collision.relativeVelocity;
-
-		HandleHit(collision.gameObject, contactPoint, hitDir);
+		HandleHit(collision.gameObject, contactPoint);
 	}
 
 	private void OnTriggerEnter(Collider other)
 	{
 		// Triggers don't have contact points; use closest point on our collider
 		Vector3 contactPoint = other.ClosestPoint(transform.position);
-
-		Rigidbody otherRb = other.attachedRigidbody;
-		Vector3 hitDir = otherRb != null
-			? otherRb.linearVelocity
-			: (transform.position - contactPoint);
-
-		HandleHit(other.gameObject, contactPoint, hitDir);
+		HandleHit(other.gameObject, contactPoint);
 	}
 
     private void UpdateHealthBar()

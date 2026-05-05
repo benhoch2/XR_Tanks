@@ -30,33 +30,16 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Min = 1, Max = 10, Category = "Game Config")]
     public int powerUpDuration = 2;
 
-    [Header("Enemy Movement")]
-    [DebugMember(Min = 0.1f, Max = 3f, Category = "Game Config")]
-    public float enemyMoveSpeed = 0.5f;
-
-    [DebugMember(Min = 0.5f, Max = 10f, Category = "Game Config")]
-    public float enemyChaseRange = 4f;
-
-    [DebugMember(Min = 0.2f, Max = 3f, Category = "Game Config")]
-    public float enemyStopRange = 1.25f;
-
-    [DebugMember(Min = 0, Max = 1, Category = "Game Config")]
-    public int enemyAIMode = 1;
-
-    [DebugMember(Tweakable = false, Category = "Game Config", DisplayName = "AI Modes")]
-    public string enemyAIModeHelp = "0 = Chase/Wander, 1 = Patrol/Scan";
-
-    [DebugMember(Min = 10f, Max = 90f, Category = "Game Config")]
-    public float enemyScanAngle = 45f;
-
-    [DebugMember(Min = 5f, Max = 120f, Category = "Game Config")]
-    public float enemyScanSpeed = 45f;
-
-    [DebugMember(Min = 0.1f, Max = 1.5f, Category = "Game Config")]
-    public float enemyObstacleCheckDistance = 0.25f;
-
     [DebugMember(Category = "Game Config")]
     public bool pauseWhenConfigMenuOpen = true;
+
+    [Header("NavMesh")]
+    [Tooltip("Layers to include when building the runtime NavMesh from MRUK colliders. " +
+             "Default = the Default layer only. If obstacle prefabs are placed on Walls, " +
+             "Obstacles, or any other layer, add those layers here or they'll be missing " +
+             "from the NavMesh and enemies will walk through them.")]
+    [SerializeField]
+    private LayerMask navMeshLayerMask = 1; // bit 0 = Default layer
 
     [Header("Testing")]
     [DebugMember(Category = "Testing")]
@@ -95,12 +78,20 @@ public class GameConfigManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Snapshot inspector defaults BEFORE applying any persisted overrides so
+        // RestoreDefaults() can reach them later. Then load whatever the user
+        // saved on the previous run.
+        CaptureDefaults();
+        LoadPersistedConfig();
+
         SceneManager.sceneLoaded += OnSceneLoaded;
-        StartCoroutine(SubscribeToDebugPanel());
+        _debugPanelCoroutine = StartCoroutine(SubscribeToDebugPanel());
     }
 
     void OnDestroy()
     {
+        SaveConfig();
         SceneManager.sceneLoaded -= OnSceneLoaded;
         if (_debugInterface != null)
         {
@@ -111,9 +102,51 @@ public class GameConfigManager : MonoBehaviour
             _navMeshDataInstance.Remove();
     }
 
+    void OnApplicationPause(bool paused)
+    {
+        // On Quest, the headset going to sleep / app being backgrounded fires
+        // OnApplicationPause(true). Save here so settings survive even if the
+        // OS later kills the app without a clean OnApplicationQuit.
+        if (paused)
+            SaveConfig();
+    }
+
+    void OnApplicationQuit()
+    {
+        SaveConfig();
+    }
+
     private DebugInterface _debugInterface;
     private NavMeshDataInstance _navMeshDataInstance;
     private bool _sceneStartupTriggered;
+    private GameObject _gameplayFloorCache;
+
+    // Tracked coroutine handles so a scene reload can stop the previous run before
+    // launching a fresh one. Without this, old coroutines kept running on the
+    // DontDestroyOnLoad singleton and could touch destroyed scene objects.
+    private Coroutine _debugPanelCoroutine;
+    private Coroutine _spawnCoroutine;
+    private Coroutine _enemyConfigCoroutine;
+    private Coroutine _winSequenceCoroutine;
+
+    // Win condition: count surviving enemy Targets (not crates, not the player).
+    // Armed once after ConfigureEnemyTankMovementWhenReady finishes and the count
+    // reflects all spawned enemies — prevents a stray early "0 enemies → win"
+    // trigger before any have actually appeared.
+    private int _enemiesAlive;
+    private bool _winConditionArmed;
+
+    /// <summary>
+    /// Cached lookup for the gameplay "Floor" GameObject. The cache is invalidated
+    /// when the referenced object is destroyed, so it survives scene reloads as long
+    /// as a new "Floor" exists in the new scene.
+    /// </summary>
+    public GameObject GetGameplayFloor()
+    {
+        if (_gameplayFloorCache == null)
+            _gameplayFloorCache = GameObject.Find("Floor");
+        return _gameplayFloorCache;
+    }
 
     private IEnumerator SubscribeToDebugPanel()
     {
@@ -156,7 +189,7 @@ public class GameConfigManager : MonoBehaviour
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         ResetSceneStartupState();
-        StartCoroutine(SubscribeToDebugPanel());
+        _debugPanelCoroutine = StartCoroutine(SubscribeToDebugPanel());
         BeginSceneStartup();
     }
 
@@ -164,6 +197,14 @@ public class GameConfigManager : MonoBehaviour
     {
         _sceneStartupTriggered = false;
         Time.timeScale = 1f;
+        _gameplayFloorCache = null;
+        _enemiesAlive = 0;
+        _winConditionArmed = false;
+
+        StopTrackedCoroutine(ref _debugPanelCoroutine);
+        StopTrackedCoroutine(ref _spawnCoroutine);
+        StopTrackedCoroutine(ref _enemyConfigCoroutine);
+        StopTrackedCoroutine(ref _winSequenceCoroutine);
 
         if (_navMeshDataInstance.valid)
             _navMeshDataInstance.Remove();
@@ -172,6 +213,15 @@ public class GameConfigManager : MonoBehaviour
         {
             _debugInterface.OnVisibilityChangedEvent -= OnDebugPanelVisibilityChanged;
             _debugInterface = null;
+        }
+    }
+
+    private void StopTrackedCoroutine(ref Coroutine handle)
+    {
+        if (handle != null)
+        {
+            StopCoroutine(handle);
+            handle = null;
         }
     }
 
@@ -184,7 +234,7 @@ public class GameConfigManager : MonoBehaviour
         Time.timeScale = 1f;
         ConfigureMetaXRRuntime();
         FindAndApplySpawnerConfig();
-        StartCoroutine(SpawnPlayerTankNearHeadset());
+        _spawnCoroutine = StartCoroutine(SpawnPlayerTankNearHeadset());
     }
 
     private void ConfigureMetaXRRuntime()
@@ -232,7 +282,7 @@ public class GameConfigManager : MonoBehaviour
             ConfigureFallbackFloor(true, null);
             SpawnPlayerTankFallback();
             BuildRuntimeNavMesh(null);
-            StartCoroutine(ConfigureEnemyTankMovementWhenReady());
+            _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
             yield break;
         }
 
@@ -255,7 +305,7 @@ public class GameConfigManager : MonoBehaviour
         }
 
         BuildRuntimeNavMesh(room.transform);
-        StartCoroutine(ConfigureEnemyTankMovementWhenReady());
+        _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
 
         // Find the TankSpawner and spawn 5 candidates
         FindSpawnPositions tankSpawner = null;
@@ -352,7 +402,7 @@ public class GameConfigManager : MonoBehaviour
 
     private void ConfigureFallbackFloor(bool enableCollider, float? floorY)
     {
-        GameObject floorObj = GameObject.Find("Floor");
+        GameObject floorObj = GetGameplayFloor();
         if (floorObj == null) return;
 
         if (floorY.HasValue)
@@ -370,7 +420,7 @@ public class GameConfigManager : MonoBehaviour
     private void BuildRuntimeNavMesh(Transform sourceRoot)
     {
         List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
-        NavMeshBuilder.CollectSources(sourceRoot, LayerMask.GetMask("Default"), NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
+        NavMeshBuilder.CollectSources(sourceRoot, navMeshLayerMask, NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
 
         if (sources.Count == 0)
         {
@@ -461,7 +511,7 @@ public class GameConfigManager : MonoBehaviour
 
             if (!foundNavPosition)
             {
-                GameObject gameplayFloor = GameObject.Find("Floor");
+                GameObject gameplayFloor = GetGameplayFloor();
                 if (gameplayFloor != null)
                 {
                     Vector3 floorProbe = root.position;
@@ -486,27 +536,23 @@ public class GameConfigManager : MonoBehaviour
                 continue;
             }
 
+            // Per-tank stats (moveSpeed, stopRange, etc.) live on the EnemyTankAI prefab now,
+            // so we read them off the AI to seed the agent rather than pushing global manager
+            // values. This is what lets Light/Medium/Heavy variants behave differently.
+            EnemyTankAI ai = root.GetComponent<EnemyTankAI>();
+            if (ai == null)
+                ai = root.gameObject.AddComponent<EnemyTankAI>();
+
             agent.enabled = true;
-            agent.speed = enemyMoveSpeed;
+            agent.speed = ai.moveSpeed;
             agent.angularSpeed = 180f;
             agent.acceleration = 2f;
-            agent.stoppingDistance = enemyStopRange;
+            agent.stoppingDistance = ai.stopRange;
             agent.autoBraking = true;
             agent.autoTraverseOffMeshLink = false;
             agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
             agent.Warp(hit.position);
 
-            EnemyTankAI ai = root.GetComponent<EnemyTankAI>();
-            if (ai == null)
-                ai = root.gameObject.AddComponent<EnemyTankAI>();
-
-            ai.chaseRange = enemyChaseRange;
-            ai.stopRange = enemyStopRange;
-            ai.moveSpeed = enemyMoveSpeed;
-            ai.behaviorMode = enemyAIMode == 1 ? EnemyTankAI.BehaviorMode.PatrolScan : EnemyTankAI.BehaviorMode.ChaseWander;
-            ai.turretScanAngle = enemyScanAngle;
-            ai.turretScanSpeed = enemyScanSpeed;
-            ai.obstacleCheckDistance = enemyObstacleCheckDistance;
             ai.ResetBehaviorState();
 
             // Wire wheel animations to the moving enemy root so the wheels turn with movement.
@@ -516,6 +562,45 @@ public class GameConfigManager : MonoBehaviour
                 wheel.enabled = true;
             }
         }
+
+        // Arm the win condition once enemies are fully configured. Counting here
+        // (rather than during Target.Awake) avoids races between scene-reload
+        // ordering and the singleton's lifecycle.
+        _enemiesAlive = CountAliveEnemies();
+        _winConditionArmed = _enemiesAlive > 0;
+    }
+
+    private int CountAliveEnemies()
+    {
+        int alive = 0;
+        foreach (var t in FindObjectsByType<Target>(FindObjectsSortMode.None))
+        {
+            if (t == null || t.maxHitPoints <= 0) continue;
+            if (t.GetComponent<ShootingControls>() != null) continue;
+            alive++;
+        }
+        return alive;
+    }
+
+    public void OnEnemyKilled()
+    {
+        if (!_winConditionArmed)
+            return;
+
+        _enemiesAlive--;
+        if (_enemiesAlive <= 0)
+        {
+            _winConditionArmed = false;
+            _winSequenceCoroutine = StartCoroutine(WinSequenceReload());
+        }
+    }
+
+    private IEnumerator WinSequenceReload()
+    {
+        // Brief celebration window before the scene reloads so the kill effect
+        // on the final enemy can play out and the player feels the resolution.
+        yield return new WaitForSecondsRealtime(2.5f);
+        ReloadScene();
     }
 
     private void SpawnPlayerTankFallback()
@@ -539,7 +624,7 @@ public class GameConfigManager : MonoBehaviour
         Camera cam = Camera.main;
         Vector3 spawnPos = cam != null ? cam.transform.position + cam.transform.forward * 2f : new Vector3(0f, 0f, 2f);
 
-        GameObject floorObj = GameObject.Find("Floor");
+        GameObject floorObj = GetGameplayFloor();
         if (floorObj != null)
             spawnPos.y = floorObj.transform.position.y + 0.01f;
 
@@ -563,5 +648,72 @@ public class GameConfigManager : MonoBehaviour
         ResetSceneStartupState();
         Scene active = SceneManager.GetActiveScene();
         SceneManager.LoadScene(active.name);
+    }
+
+    [DebugMember(Category = "Game Config")]
+    public void RestoreDefaults()
+    {
+        numberOfEnemies = _defaults.numberOfEnemies;
+        numberOfCrates = _defaults.numberOfCrates;
+        projectileMinSpeed = _defaults.projectileMinSpeed;
+        projectileMaxSpeed = _defaults.projectileMaxSpeed;
+        powerUpDuration = _defaults.powerUpDuration;
+        pauseWhenConfigMenuOpen = _defaults.pauseWhenConfigMenuOpen;
+        enemyShootingEnabled = _defaults.enemyShootingEnabled;
+        playerInvulnerable = _defaults.playerInvulnerable;
+
+        SaveConfig();
+
+        Debug.Log("[GameConfig] Restored defaults. Hit Reload Scene to respawn with the new counts.");
+    }
+
+    // ---------- Persistence ----------
+
+    private const string PrefPrefix = "XRTanks.GameConfig.";
+
+    private struct ConfigDefaults
+    {
+        public int numberOfEnemies, numberOfCrates;
+        public int projectileMinSpeed, projectileMaxSpeed, powerUpDuration;
+        public bool pauseWhenConfigMenuOpen, enemyShootingEnabled, playerInvulnerable;
+    }
+
+    private ConfigDefaults _defaults;
+
+    private void CaptureDefaults()
+    {
+        _defaults.numberOfEnemies = numberOfEnemies;
+        _defaults.numberOfCrates = numberOfCrates;
+        _defaults.projectileMinSpeed = projectileMinSpeed;
+        _defaults.projectileMaxSpeed = projectileMaxSpeed;
+        _defaults.powerUpDuration = powerUpDuration;
+        _defaults.pauseWhenConfigMenuOpen = pauseWhenConfigMenuOpen;
+        _defaults.enemyShootingEnabled = enemyShootingEnabled;
+        _defaults.playerInvulnerable = playerInvulnerable;
+    }
+
+    private void LoadPersistedConfig()
+    {
+        numberOfEnemies = PlayerPrefs.GetInt(PrefPrefix + nameof(numberOfEnemies), numberOfEnemies);
+        numberOfCrates = PlayerPrefs.GetInt(PrefPrefix + nameof(numberOfCrates), numberOfCrates);
+        projectileMinSpeed = PlayerPrefs.GetInt(PrefPrefix + nameof(projectileMinSpeed), projectileMinSpeed);
+        projectileMaxSpeed = PlayerPrefs.GetInt(PrefPrefix + nameof(projectileMaxSpeed), projectileMaxSpeed);
+        powerUpDuration = PlayerPrefs.GetInt(PrefPrefix + nameof(powerUpDuration), powerUpDuration);
+        pauseWhenConfigMenuOpen = PlayerPrefs.GetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0) != 0;
+        enemyShootingEnabled = PlayerPrefs.GetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0) != 0;
+        playerInvulnerable = PlayerPrefs.GetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0) != 0;
+    }
+
+    private void SaveConfig()
+    {
+        PlayerPrefs.SetInt(PrefPrefix + nameof(numberOfEnemies), numberOfEnemies);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(numberOfCrates), numberOfCrates);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(projectileMinSpeed), projectileMinSpeed);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(projectileMaxSpeed), projectileMaxSpeed);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(powerUpDuration), powerUpDuration);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0);
+        PlayerPrefs.Save();
     }
 }

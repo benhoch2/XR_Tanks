@@ -27,13 +27,25 @@ public class EnemyTankAI : MonoBehaviour
         Done
     }
 
-    [HideInInspector] public float moveSpeed = 0.5f;
-    [HideInInspector] public float chaseRange = 4f;
-    [HideInInspector] public float stopRange = 1.25f;
-    [HideInInspector] public BehaviorMode behaviorMode = BehaviorMode.ChaseWander;
-    [HideInInspector] public float obstacleCheckDistance = 0.25f;
-    [HideInInspector] public float turretScanAngle = 45f;
-    [HideInInspector] public float turretScanSpeed = 25f;
+    [Header("Movement")]
+    [Tooltip("Top forward speed in m/s. Authoritative on the prefab — distinct values per variant give Light/Medium/Heavy tanks.")]
+    public float moveSpeed = 0.5f;
+    [Tooltip("Distance at which this tank starts chasing the player.")]
+    public float chaseRange = 4f;
+    [Tooltip("Distance at which this tank stops moving toward the player and rotates in place to aim.")]
+    public float stopRange = 1.25f;
+    [Tooltip("How far ahead the obstacle sphere-cast looks before this tank decides it's blocked.")]
+    public float obstacleCheckDistance = 0.25f;
+
+    [Header("AI")]
+    [Tooltip("Per-prefab AI mode. ChaseWander tanks pursue the player when in chase range; PatrolScan tanks roam, scan, then fire volleys.")]
+    public BehaviorMode behaviorMode = BehaviorMode.ChaseWander;
+
+    [Header("Turret Scan")]
+    [Tooltip("Half-angle of the turret's left/right scan sweep, in degrees.")]
+    public float turretScanAngle = 45f;
+    [Tooltip("Turret yaw rate during a scan sweep, in degrees per second.")]
+    public float turretScanSpeed = 25f;
 
     [Header("Scan")]
     [Tooltip("Inclusive minimum number of half-sweeps per scan. Randomized per scan so enemies desync.")]
@@ -65,6 +77,17 @@ public class EnemyTankAI : MonoBehaviour
     [SerializeField] private float aimErrorMaxFactor = 0.1f;
     [Tooltip("Minimum elevation (degrees above horizontal) for a shot — stops enemies from firing flat.")]
     [SerializeField] private float minLaunchElevationDeg = 15f;
+    [Tooltip("ChaseWander only: seconds between volleys once the tank is in stop-range and aiming. " +
+             "Lower = fires more often. Ignored by PatrolScan tanks (which fire whenever a scan ends).")]
+    [SerializeField] private float chaseWanderVolleyCooldown = 3f;
+
+    [Header("Knockback")]
+    [Tooltip("Effective mass for hit-impact knockback. Higher = less knockback from the same impulse. " +
+             "The Heavy variant overrides this to be noticeably tankier than Light/Medium.")]
+    [SerializeField] private float mass = 1f;
+
+    [Tooltip("How quickly knockback velocity decays back to zero (per second). Higher = stops sooner.")]
+    [SerializeField] private float knockbackDamping = 6f;
 
     private NavMeshAgent _agent;
     private Transform _player;
@@ -89,12 +112,22 @@ public class EnemyTankAI : MonoBehaviour
     private bool _hasLastImpact;
     private float _phaseStartTime;
     private bool _awaitingImpact;
+    private Collider[] _selfColliders;
+
+    // ChaseWander shooting bookkeeping. Reused for nothing else.
+    private bool _chaseWanderInVolley;
+    private float _nextChaseWanderShotTime;
+
+    // Knockback velocity, integrated per-frame and decayed exponentially. Driven via
+    // agent.Move so the agent's own pathing follows the slide instead of fighting it.
+    private Vector3 _knockbackVelocity;
 
     private void Awake()
     {
         _agent = GetComponent<NavMeshAgent>();
         _homePosition = transform.position;
         _turretTransform = FindTurretTransform();
+        _selfColliders = GetComponentsInChildren<Collider>(true);
 
         if (_agent != null)
         {
@@ -108,7 +141,10 @@ public class EnemyTankAI : MonoBehaviour
 
     public void ResetBehaviorState()
     {
-        if (_agent != null)
+        // ResetPath throws when the agent is disabled or off-mesh. Awake() calls this
+        // before GameConfigManager.ConfigureEnemyTankMovementWhenReady() has enabled
+        // the agent and warped it onto the runtime NavMesh, so guard accordingly.
+        if (_agent != null && _agent.enabled && _agent.isOnNavMesh)
             _agent.ResetPath();
 
         _nextRepathTime = 0f;
@@ -118,6 +154,8 @@ public class EnemyTankAI : MonoBehaviour
         _awaitingImpact = false;
         _hasLastImpact = false;
         _shotsFiredThisVolley = 0;
+        _chaseWanderInVolley = false;
+        _nextChaseWanderShotTime = 0f;
         ResetTurretToForward();
     }
 
@@ -125,8 +163,6 @@ public class EnemyTankAI : MonoBehaviour
     {
         if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh)
             return;
-
-        SyncConfigFromManager();
 
         _agent.speed = moveSpeed;
         _agent.stoppingDistance = stopRange;
@@ -136,6 +172,8 @@ public class EnemyTankAI : MonoBehaviour
             _lastBehaviorMode = behaviorMode;
             ResetBehaviorState();
         }
+
+        ApplyKnockbackStep();
 
         switch (behaviorMode)
         {
@@ -149,33 +187,39 @@ public class EnemyTankAI : MonoBehaviour
         }
     }
 
-    private void SyncConfigFromManager()
+    private void EnsurePlayerCached()
     {
-        if (GameConfigManager.Instance == null)
+        if (_player != null)
             return;
 
-        moveSpeed = GameConfigManager.Instance.enemyMoveSpeed;
-        chaseRange = GameConfigManager.Instance.enemyChaseRange;
-        stopRange = GameConfigManager.Instance.enemyStopRange;
-        obstacleCheckDistance = GameConfigManager.Instance.enemyObstacleCheckDistance;
-        turretScanAngle = GameConfigManager.Instance.enemyScanAngle;
-        turretScanSpeed = GameConfigManager.Instance.enemyScanSpeed;
-        behaviorMode = GameConfigManager.Instance.enemyAIMode == 1 ? BehaviorMode.PatrolScan : BehaviorMode.ChaseWander;
+        ShootingControls pc = FindAnyObjectByType<ShootingControls>();
+        if (pc != null)
+            _player = pc.transform;
     }
 
     private void UpdateChaseWanderMode()
     {
-        if (_player == null)
+        EnsurePlayerCached();
+
+        // If we're already mid-volley, freeze in place and let the shooting state
+        // machine run. Stops the tank from re-pathing or rotating its body while
+        // it's trying to settle the turret on the player.
+        if (_chaseWanderInVolley)
         {
-            ShootingControls playerControls = FindAnyObjectByType<ShootingControls>();
-            if (playerControls != null)
-                _player = playerControls.transform;
+            if (UpdateShootingVolley())
+                return;
+
+            _chaseWanderInVolley = false;
+            _nextChaseWanderShotTime = Time.time + chaseWanderVolleyCooldown;
         }
 
         bool hasTarget = false;
+        bool inFiringRange = false;
+        Vector3 toPlayer = Vector3.zero;
+
         if (_player != null)
         {
-            Vector3 toPlayer = _player.position - transform.position;
+            toPlayer = _player.position - transform.position;
             toPlayer.y = 0f;
             float distanceToPlayer = toPlayer.magnitude;
 
@@ -189,6 +233,7 @@ public class EnemyTankAI : MonoBehaviour
                 }
                 else
                 {
+                    inFiringRange = true;
                     _agent.ResetPath();
                     RotateToward(toPlayer.normalized);
                 }
@@ -203,6 +248,14 @@ public class EnemyTankAI : MonoBehaviour
 
         if (!hasTarget && _agent.hasPath)
             DriveLikeTank(_agent.steeringTarget - transform.position);
+
+        // Try to start a new volley once we're stopped near the player and the
+        // cooldown has elapsed. TryBeginShootingVolley does the LOS check.
+        if (inFiringRange && Time.time >= _nextChaseWanderShotTime && TryBeginShootingVolley())
+        {
+            _chaseWanderInVolley = true;
+            return;
+        }
 
         ResetTurretToForward();
     }
@@ -243,7 +296,8 @@ public class EnemyTankAI : MonoBehaviour
                 break;
 
             case PatrolScanState.Shooting:
-                UpdateShootingVolley();
+                if (!UpdateShootingVolley())
+                    _patrolScanState = PatrolScanState.PickDirection;
                 break;
         }
     }
@@ -267,8 +321,21 @@ public class EnemyTankAI : MonoBehaviour
         return true;
     }
 
-    private void UpdateShootingVolley()
+    /// <summary>
+    /// Drive the shooting state machine one tick. Returns true while a volley is still
+    /// in flight; false once it's complete (so the caller can transition out — e.g.
+    /// PatrolScan goes back to PickDirection, ChaseWander clears its in-volley flag).
+    /// </summary>
+    private bool UpdateShootingVolley()
     {
+        // Honor the testing toggle mid-volley: if shooting is disabled while a volley is
+        // already in flight, abort cleanly instead of continuing to fire.
+        if (GameConfigManager.Instance != null && !GameConfigManager.Instance.enemyShootingEnabled)
+        {
+            _awaitingImpact = false;
+            return false;
+        }
+
         // Refresh aim target to player's current position each frame (so they're tracked if moving).
         if (_player != null)
             _currentAimTarget = _player.position;
@@ -277,38 +344,38 @@ public class EnemyTankAI : MonoBehaviour
         {
             case ShootingPhase.AimAtPlayer:
             {
-                bool settled = AimTurretYawAtWorldPosition(_currentAimTarget);
+                bool settled = AimTurretAtWorldPosition(_currentAimTarget);
                 bool timedOut = Time.time - _phaseStartTime > aimMaxDuration;
                 if (settled || timedOut)
                     TransitionShootingPhase(ShootingPhase.Fire);
-                break;
+                return true;
             }
 
             case ShootingPhase.Fire:
                 FireShot();
                 TransitionShootingPhase(ShootingPhase.WaitForImpact);
-                break;
+                return true;
 
             case ShootingPhase.WaitForImpact:
                 // Keep yaw-tracking while waiting — feels alive.
-                AimTurretYawAtWorldPosition(_currentAimTarget);
+                AimTurretAtWorldPosition(_currentAimTarget);
                 if (!_awaitingImpact || Time.time - _phaseStartTime > shotImpactTimeout)
                 {
                     // Timeout counts as a miss with no correction feedback.
                     _awaitingImpact = false;
                     AdvanceAfterShot();
                 }
-                break;
+                return true;
 
             case ShootingPhase.BetweenShots:
-                AimTurretYawAtWorldPosition(_currentAimTarget);
+                AimTurretAtWorldPosition(_currentAimTarget);
                 if (Time.time - _phaseStartTime >= betweenShotsDelay)
                     TransitionShootingPhase(ShootingPhase.Fire);
-                break;
+                return true;
 
             case ShootingPhase.Done:
-                _patrolScanState = PatrolScanState.PickDirection;
-                break;
+            default:
+                return false;
         }
     }
 
@@ -375,10 +442,13 @@ public class EnemyTankAI : MonoBehaviour
         proj.onImpact = OnProjectileImpact;
 
         Collider projCol = projObj.GetComponent<Collider>();
-        if (projCol != null)
+        if (projCol != null && _selfColliders != null)
         {
-            foreach (var selfCol in GetComponentsInChildren<Collider>())
-                Physics.IgnoreCollision(projCol, selfCol);
+            for (int i = 0; i < _selfColliders.Length; i++)
+            {
+                if (_selfColliders[i] != null)
+                    Physics.IgnoreCollision(projCol, _selfColliders[i]);
+            }
         }
 
         Rigidbody rb = projObj.GetComponent<Rigidbody>();
@@ -478,13 +548,9 @@ public class EnemyTankAI : MonoBehaviour
     {
         playerPos = Vector3.zero;
 
+        EnsurePlayerCached();
         if (_player == null)
-        {
-            ShootingControls pc = FindAnyObjectByType<ShootingControls>();
-            if (pc == null)
-                return false;
-            _player = pc.transform;
-        }
+            return false;
 
         Transform origin = _turretTransform != null ? _turretTransform : transform;
         Vector3 originPos = origin.position + Vector3.up * 0.05f;
@@ -498,15 +564,14 @@ public class EnemyTankAI : MonoBehaviour
         // Walk all hits in distance order so our own colliders (which almost always sit
         // between the turret and the player) don't masquerade as "LOS clear". First
         // non-self hit decides: player → clear, anything else (MRUK wall etc.) → blocked.
+        // If we never see the player explicitly (cast missed them entirely or only self
+        // colliders were in range), default to "no LOS" so we don't fire blind.
         RaycastHit[] hits = Physics.RaycastAll(
             originPos,
             toPlayer / dist,
             dist,
             Physics.DefaultRaycastLayers,
             QueryTriggerInteraction.Ignore);
-
-        if (hits.Length == 0)
-            return true;
 
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
@@ -522,26 +587,89 @@ public class EnemyTankAI : MonoBehaviour
             return t == _player || t.IsChildOf(_player);
         }
 
-        return true;
+        return false;
     }
 
-    private bool AimTurretYawAtWorldPosition(Vector3 worldPos)
+    private bool AimTurretAtWorldPosition(Vector3 worldPos)
     {
         if (_turretTransform == null)
             return true;
 
-        Vector3 toTarget = worldPos - _turretTransform.position;
-        toTarget.y = 0f;
-        if (toTarget.sqrMagnitude < 0.0001f)
+        Vector3 toTargetHoriz = worldPos - _turretTransform.position;
+        toTargetHoriz.y = 0f;
+        if (toTargetHoriz.sqrMagnitude < 0.0001f)
             return true;
 
-        float desiredYaw = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
-        Vector3 euler = _turretTransform.eulerAngles;
-        float newYaw = Mathf.MoveTowardsAngle(euler.y, desiredYaw, aimYawSpeedDegPerSec * Time.deltaTime);
-        euler.y = newYaw;
-        _turretTransform.eulerAngles = euler;
+        // Re-run the same ballistic solver FireShot will use so the barrel visibly
+        // tracks the actual firing arc.
+        float horizDist = toTargetHoriz.magnitude;
+        Vector3 firePos = GetFirePosition();
+        float launchSpeed = ComputeLaunchSpeed(horizDist);
+        SolveBallistic(firePos, worldPos, launchSpeed, out Vector3 launchVelocity);
+        launchVelocity = EnforceMinElevation(launchVelocity);
 
-        return Mathf.Abs(Mathf.DeltaAngle(newYaw, desiredYaw)) <= aimSettleThresholdDeg;
+        Vector3 launchDir = launchVelocity.sqrMagnitude > 0.0001f
+            ? launchVelocity.normalized
+            : (worldPos - _turretTransform.position).normalized;
+
+        // Aim must be done in the body's local frame: the previous implementation
+        // drove pitch via world eulerAngles.x, which only behaves as "barrel up/down"
+        // when the body is yawed to face world +Z. As soon as the tank turned, world
+        // Euler X started mixing roll into the turret and the cannon visually drifted
+        // off the firing arc. Composing a target rotation from LookRotation and then
+        // expressing it in the parent's local frame keeps the pivot axes aligned with
+        // the chassis no matter which way the body is facing — same approach the
+        // player turret takes via local Euler in TowerController.
+        Quaternion desiredWorldRot = Quaternion.LookRotation(launchDir, Vector3.up);
+        Transform parent = _turretTransform.parent != null ? _turretTransform.parent : transform;
+        Quaternion desiredLocalRot = Quaternion.Inverse(parent.rotation) * desiredWorldRot;
+
+        _turretTransform.localRotation = Quaternion.RotateTowards(
+            _turretTransform.localRotation,
+            desiredLocalRot,
+            aimYawSpeedDegPerSec * Time.deltaTime);
+
+        return Quaternion.Angle(_turretTransform.localRotation, desiredLocalRot) <= aimSettleThresholdDeg;
+    }
+
+    /// <summary>
+    /// Adds a knockback impulse (world-space) to this tank. Mass divides the impulse so
+    /// heavier variants slide less from the same hit. Only the horizontal component is
+    /// kept — tanks slide on the navmesh, they don't launch into the air.
+    /// </summary>
+    public void ApplyKnockback(Vector3 worldImpulse)
+    {
+        Vector3 horizImpulse = new Vector3(worldImpulse.x, 0f, worldImpulse.z);
+        if (horizImpulse.sqrMagnitude < 0.0001f)
+            return;
+
+        float effectiveMass = Mathf.Max(0.001f, mass);
+        _knockbackVelocity += horizImpulse / effectiveMass;
+    }
+
+    private void ApplyKnockbackStep()
+    {
+        if (_knockbackVelocity.sqrMagnitude < 0.0001f)
+        {
+            _knockbackVelocity = Vector3.zero;
+            return;
+        }
+
+        Vector3 step = _knockbackVelocity * Time.deltaTime;
+        // agent.Move integrates collision against the navmesh so the slide stops at walls
+        // and follows the floor. Direct rigidbody impulses don't survive the agent's
+        // per-frame transform overwrite — see CLAUDE.md note.
+        if (_agent != null && _agent.enabled && _agent.isOnNavMesh)
+            _agent.Move(step);
+        else
+            transform.position += step;
+
+        // Exponential decay: roughly velocity *= e^(-damping*dt). Vector3.Lerp toward
+        // zero with a clamped t gives the same shape and is stable at low frame rates.
+        _knockbackVelocity = Vector3.Lerp(
+            _knockbackVelocity,
+            Vector3.zero,
+            Mathf.Clamp01(knockbackDamping * Time.deltaTime));
     }
 
     private void DriveLikeTank(Vector3 desiredDirection)
@@ -592,6 +720,11 @@ public class EnemyTankAI : MonoBehaviour
                 return;
             }
         }
+
+        // All random samples failed (corner trap, tiny room, all probes off-mesh).
+        // Fall back to the home position so the agent doesn't silently freeze.
+        if (NavMesh.SamplePosition(_homePosition, out NavMeshHit homeHit, 2f, NavMesh.AllAreas))
+            _agent.SetDestination(homeHit.position);
     }
 
     private void PickRandomPatrolDirection()
@@ -701,8 +834,13 @@ public class EnemyTankAI : MonoBehaviour
         if (_turretTransform == null)
             return;
 
+        // Yaw back to body-forward and pitch back to horizontal. Without the pitch
+        // reset, the barrel would stay tilted up between volleys after AimTurret
+        // had pitched it for a ballistic shot.
+        float resetSpeed = turretScanSpeed * 2f * Time.deltaTime;
         Vector3 localEuler = _turretTransform.localEulerAngles;
-        localEuler.y = Mathf.MoveTowardsAngle(localEuler.y, 0f, turretScanSpeed * 2f * Time.deltaTime);
+        localEuler.y = Mathf.MoveTowardsAngle(localEuler.y, 0f, resetSpeed);
+        localEuler.x = Mathf.MoveTowardsAngle(localEuler.x, 0f, resetSpeed);
         _turretTransform.localEulerAngles = localEuler;
     }
 
@@ -717,4 +855,66 @@ public class EnemyTankAI : MonoBehaviour
 
         return null;
     }
+
+#if UNITY_EDITOR
+    private void OnDrawGizmosSelected()
+    {
+        // Chase range — yellow circle on the ground.
+        Gizmos.color = new Color(1f, 0.92f, 0.016f, 0.8f);
+        DrawHorizontalCircle(transform.position, chaseRange, 32);
+
+        // Stop range — red circle on the ground.
+        Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.9f);
+        DrawHorizontalCircle(transform.position, stopRange, 32);
+
+        // Turret scan arc — green wedge centered on the turret's current forward.
+        Transform turret = _turretTransform != null ? _turretTransform : transform;
+        Vector3 turretPos = turret.position;
+        Quaternion left = Quaternion.AngleAxis(-turretScanAngle, Vector3.up);
+        Quaternion right = Quaternion.AngleAxis(turretScanAngle, Vector3.up);
+        Vector3 forward = turret.forward;
+        Gizmos.color = new Color(0.2f, 1f, 0.4f, 0.9f);
+        Gizmos.DrawLine(turretPos, turretPos + left * forward * Mathf.Max(chaseRange, 1f));
+        Gizmos.DrawLine(turretPos, turretPos + right * forward * Mathf.Max(chaseRange, 1f));
+
+        // Current NavMesh path — blue line strip.
+        if (Application.isPlaying && _agent != null && _agent.hasPath)
+        {
+            Gizmos.color = new Color(0.3f, 0.6f, 1f, 0.9f);
+            Vector3[] corners = _agent.path.corners;
+            for (int i = 0; i < corners.Length - 1; i++)
+                Gizmos.DrawLine(corners[i] + Vector3.up * 0.02f, corners[i + 1] + Vector3.up * 0.02f);
+        }
+
+        // Last shot impact — magenta sphere so you can see how off the aim correction was.
+        if (Application.isPlaying && _hasLastImpact)
+        {
+            Gizmos.color = new Color(1f, 0.2f, 1f, 0.9f);
+            Gizmos.DrawWireSphere(_lastImpactPosition, 0.08f);
+        }
+
+        // Current aim target — cyan sphere (only meaningful while a volley is active).
+        if (Application.isPlaying && _patrolScanState == PatrolScanState.Shooting)
+        {
+            Gizmos.color = new Color(0.2f, 1f, 1f, 0.9f);
+            Gizmos.DrawWireSphere(_currentAimTarget, 0.08f);
+            Gizmos.DrawLine(turretPos, _currentAimTarget);
+        }
+    }
+
+    private static void DrawHorizontalCircle(Vector3 center, float radius, int segments)
+    {
+        if (radius <= 0f || segments < 3)
+            return;
+
+        Vector3 prev = center + new Vector3(radius, 0f, 0f);
+        for (int i = 1; i <= segments; i++)
+        {
+            float angle = (i / (float)segments) * Mathf.PI * 2f;
+            Vector3 next = center + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+            Gizmos.DrawLine(prev, next);
+            prev = next;
+        }
+    }
+#endif
 }
