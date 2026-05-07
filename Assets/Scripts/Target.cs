@@ -86,7 +86,7 @@ public class Target : MonoBehaviour
             if (currentHitPoints <= 0)
             {
                 SpawnEffect(effectDuration);
-                HandleLethalHit();
+                HandleLethalHit(proj.shooter);
             }
             else
             {
@@ -96,7 +96,7 @@ public class Target : MonoBehaviour
         }
     }
 
-    private void HandleLethalHit()
+    private void HandleLethalHit(Transform shooter = null)
     {
         // The player tank carries ShootingControls; enemies don't.
         if (GetComponent<ShootingControls>() != null)
@@ -105,7 +105,13 @@ public class Target : MonoBehaviour
             return;
         }
 
-        // Enemy died — notify the manager so the win condition can resolve.
+        // Enemy died. If a CrateReward is attached to this enemy, roll a drop for the player
+        // BEFORE the OnEnemyKilled notification (which may trigger a scene reload at the win
+        // condition — we want the reward applied first). Reward only fires when we know the
+        // shooter, so laser/drone kills currently skip this; both weapons are already strong.
+        if (shooter != null && TryGetComponent(out CrateReward deathReward))
+            deathReward.RollAndApply(shooter.gameObject, transform.position);
+
         if (GameConfigManager.Instance != null)
             GameConfigManager.Instance.OnEnemyKilled();
 

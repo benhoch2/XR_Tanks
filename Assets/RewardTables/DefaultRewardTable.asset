@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d4e03d0308054241af30a3e54c81b48, type: 3}
+  m_Name: DefaultRewardTable
+  m_EditorClassIdentifier:
+  pctNothing: 0.3
+  pctBlueAmmo: 0.17
+  pctGreenAmmo: 0.17
+  pctRedAmmo: 0.17
+  pctHealth: 0.06
+  pctDrone: 0.04
+  pctPlaneDrone: 0.04
+  pctLaser: 0.05
+  blueIndex: 1
+  greenIndex: 2
+  redIndex: 3
+  droneIndex: 4
+  planeDroneIndex: 5
+  laserIndex: 6
+  healAmount: 25

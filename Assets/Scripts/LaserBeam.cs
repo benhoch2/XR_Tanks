@@ -22,6 +22,9 @@ public class LaserBeam : MonoBehaviour
     [Tooltip("Beam line width in meters.")]
     [SerializeField] private float beamWidth = 0.008f;
 
+    [Tooltip("Length (in local Z, meters) of the static placeholder line drawn while the beam isn't bound to a firePoint — i.e. when ShootingControls.ShowPreview spawned this prefab as a floating preview. Unused at runtime; the live beam reaches firePoint+forward*maxRange.")]
+    [SerializeField] private float previewLineLength = 0.18f;
+
     [Tooltip("Base beam color before the HDR multiplier and per-frame animation are applied.")]
     [SerializeField] private Color beamColor = new Color(1f, 0.15f, 0.15f, 1f);
 
@@ -69,7 +72,7 @@ public class LaserBeam : MonoBehaviour
         _lr.endWidth = beamWidth;
         _lr.positionCount = 2;
         _lr.SetPosition(0, Vector3.zero);
-        _lr.SetPosition(1, new Vector3(0f, 0f, 0.1f));
+        _lr.SetPosition(1, new Vector3(0f, 0f, previewLineLength));
         _lr.numCapVertices = 4;
 
         // The prefab may not ship with a material; assign a sensible default so the beam doesn't

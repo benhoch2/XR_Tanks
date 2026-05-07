@@ -104,15 +104,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 930b0bbb6161ec740b61e29123b1d075, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  pctNothing: 0.5
-  pctBlueAmmo: 0.15
-  pctGreenAmmo: 0.15
-  pctRedAmmo: 0.15
-  pctHealth: 0.05
-  blueIndex: 1
-  greenIndex: 2
-  redIndex: 3
-  healAmount: 25
+  table: {fileID: 11400000, guid: e1d4b3a7c2e94c3a8f5d3a7e2c1f4b9d, type: 2}
   rewardLabelPrefab: {fileID: 0}
   autoSwitchOnUnlock: 1
 --- !u!1001 &5658832770688220529

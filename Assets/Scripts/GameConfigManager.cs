@@ -48,6 +48,11 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Testing")]
     public bool playerInvulnerable = false;
 
+    [Tooltip("If true, the player tank starts with 1000 of every finite ammo type (gray stays infinite). " +
+             "Read once by ShootingControls.Start, so toggling this requires a scene reload to take effect.")]
+    [DebugMember(Category = "Testing")]
+    public bool playerStartsWithFullAmmo = false;
+
     [Header("Controls — Right")]
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Trigger")]
     public string ctrlRTrigger = "Fire (hold to charge)";

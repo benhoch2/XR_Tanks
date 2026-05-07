@@ -462,14 +462,30 @@ MonoBehaviour:
   - {fileID: 8823369355473014520, guid: 5b5c907dc33e1a4449cbccb746bccf7f, type: 3}
   - {fileID: 6504774557883790497, guid: a6155f141d834b54d8dcce6131d3fbad, type: 3}
   firePoint: {fileID: 2415187493405424666}
-  unlockedAtStart:
-  - 1
+  startingAmmo:
+  - -1
   - 0
   - 0
   - 0
-  - 1
-  - 1
-  - 1
+  - 0
+  - 0
+  - 0
+  ammoPerPickup:
+  - 0
+  - 20
+  - 20
+  - 5
+  - 3
+  - 3
+  - 15
+  perSlotDamage:
+  - 10
+  - 25
+  - 25
+  - 25
+  - 0
+  - 0
+  - 0
   minProjectileVelocity: 2
   maxProjectileVelocity: 20
   maxChargeTime: 2
