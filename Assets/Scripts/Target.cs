@@ -245,4 +245,46 @@ public class Target : MonoBehaviour
         UpdateHealthBar();
         return true;
     }
+
+    /// <summary>
+    /// Continuous-damage entry point used by DPS weapons (e.g. the laser cannon). Skips the
+    /// projectile/crate paths in <see cref="HandleHit"/> and just deducts HP, runs the lethal
+    /// check, and triggers the same death sequence as a projectile kill. No-op for crates
+    /// (maxHitPoints &lt;= 0) — callers should special-case those via <see cref="Kill"/>.
+    /// </summary>
+    public void TakeDamage(int damage)
+    {
+        if (damage <= 0 || maxHitPoints <= 0 || currentHitPoints <= 0) return;
+
+        currentHitPoints -= damage;
+        UpdateHealthBar();
+
+        if (currentHitPoints <= 0)
+        {
+            SpawnEffect(effectDuration);
+            HandleLethalHit();
+        }
+    }
+
+    /// <summary>
+    /// Insta-kill entry point used by weapons that bypass HP entirely (e.g. the suicide drone).
+    /// Spawns the death effect, then runs the same lethal-hit follow-up that the projectile path
+    /// uses (notify GameConfigManager for enemies, run player death sequence for the player tank,
+    /// or just destroy the GameObject for crates).
+    /// </summary>
+    public void Kill()
+    {
+        currentHitPoints = 0;
+        UpdateHealthBar();
+        SpawnEffect(effectDuration);
+
+        // For zero-HP targets (crates) HandleLethalHit's player/enemy logic doesn't apply.
+        if (maxHitPoints <= 0)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        HandleLethalHit();
+    }
 }

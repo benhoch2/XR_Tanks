@@ -458,19 +458,25 @@ MonoBehaviour:
   - {fileID: 1720991040967052277, guid: f61d6c97f594dab42ab098765ff68aa4, type: 3}
   - {fileID: 1720991040967052277, guid: cdec6b5e2d8dd28408f58872e272cf69, type: 3}
   - {fileID: 1720991040967052277, guid: fef8d5dede12a904098badb431b3842b, type: 3}
+  - {fileID: 7487954237152526689, guid: 3a6f7e295b5cbe242822a28e430637c3, type: 3}
+  - {fileID: 8823369355473014520, guid: 5b5c907dc33e1a4449cbccb746bccf7f, type: 3}
+  - {fileID: 6504774557883790497, guid: a6155f141d834b54d8dcce6131d3fbad, type: 3}
   firePoint: {fileID: 2415187493405424666}
   unlockedAtStart:
   - 1
   - 0
   - 0
   - 0
+  - 1
+  - 1
+  - 1
   minProjectileVelocity: 2
   maxProjectileVelocity: 20
   maxChargeTime: 2
   projectileDamage: 25
   powerBar: {fileID: 1224582055897053293}
   previewDuration: 3
-  previewScale: 30
+  previewTargetSize: 0.15
   previewHeightOffset: 0.1
 --- !u!65 &5196274824509777162
 BoxCollider:

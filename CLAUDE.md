@@ -43,6 +43,8 @@ Per-frame, several components pull their values from the singleton rather than u
 
 `enemyAIMode` is an `int` (0 = ChaseWander, 1 = PatrolScan) because `[DebugMember(Min=0,Max=1)]` only supports numeric sliders in the Immersive Debugger — it gets mapped to `EnemyTankAI.BehaviorMode` at both read sites.
 
+`GameConfigManager` also exposes a "Testing" category with `enemyShootingEnabled` (gates `EnemyTankAI.TryBeginShootingVolley`) and `playerInvulnerable` (gates damage in `Target.HandleHit`, detected by the presence of `ShootingControls` on the hit GameObject — that component only lives on the player tank).
+
 ### In-headset config menu (Immersive Debugger)
 
 The Y button on the left controller opens Meta's Immersive Debugger panel, which auto-populates from `[DebugMember]` attributes on `GameConfigManager` (categorized as "Game Config" and "Controls"). When the panel's visibility toggles, `OnDebugPanelVisibilityChanged` sets `Time.timeScale` to 0 / 1 if `pauseWhenConfigMenuOpen` is true. This is why `GameConfigManager` waits up to 10 seconds in a coroutine for the `DebugInterface` to exist — the panel is created lazily and may start inactive.
@@ -56,9 +58,24 @@ The Y button on the left controller opens Meta's Immersive Debugger panel, which
 `Projectile` has three `ProjectileType`s with different collision behavior:
 - **Standard (gray):** damages `Target`s on direct hit; on first non-target hit, starts a 5s fuse then explodes.
 - **Explosive (blue):** explodes immediately on any non-target surface. Special case in `OnCollisionEnter`: floor-like hits (`FLOOR`, `Floor`, `FLOOR_EffectMesh`, `GLOBAL_MESH`) are *ignored* if they happen more than `elevatedFloorIgnoreThreshold` (5cm) above the gameplay `Floor`. Without this, MRUK effect-mesh colliders at bouncing altitudes would detonate shots mid-air.
-- **Teleport (red):** teleports the `shooter` transform to the impact point.
+- **Teleport (red):** on first contact, starts a `teleportDelay` timer; the ball stays alive and bouncy during the window, then teleports the `shooter` transform to wherever the ball ended up. `Target` deliberately does *not* destroy teleport balls so this timer can run to completion even after a `Target` hit.
 
-`Target` handles both `OnCollisionEnter` and `OnTriggerEnter` so it works whether the projectile's collider or the target's is the trigger. `maxHitPoints <= 0` or `projectile.damage <= 0` is the "instant kill" path used by crates; positive HP drives the attached `PowerBar` health bar (which uses `useColorLerp` for green→red).
+`Projectile.bounciness` / `friction` are applied as a runtime `PhysicsMaterial` in `Awake` (only when `bounciness > 0`).
+
+`Projectile.onImpact` is a one-shot `Action<Vector3>` callback fired from `OnCollisionEnter` after the elevated-floor filter, used by `EnemyTankAI` to learn where its shots actually land (see Enemy shooting volleys below). It's nulled out after invoke so it never fires twice.
+
+`Target` handles both `OnCollisionEnter` and `OnTriggerEnter` so it works whether the projectile's collider or the target's is the trigger. `maxHitPoints <= 0` or `projectile.damage <= 0` is the "instant kill" path used by crates; positive HP drives the attached `PowerBar` health bar (which uses `useColorLerp` for green→red). Knockback on hit is applied via `NavMeshAgent.Move` for agent-driven enemies — direct rigidbody impulses are lost because the agent overrides the transform each frame.
+
+### Enemy shooting volleys
+
+In `PatrolScan` mode, after a turret scan ends `EnemyTankAI` checks `HasLineOfSightToPlayer` and (if the `enemyShootingEnabled` testing toggle is on) enters a `Shooting` state machine: `AimAtPlayer → Fire → WaitForImpact → BetweenShots → … → Done`. Each shot:
+
+1. Solves a ballistic launch velocity for the current target via `SolveBallistic` (low-arc solution; falls back to a 45° lob when out of range at the clamped launch speed).
+2. Re-uses the previous shot's impact error as a *learned correction*: aim point = current target − (last impact − last aim). Combined with a per-shot random error proportional to range (`aimErrorMaxFactor`), this makes enemies miss the first volley shot but converge.
+3. Enforces `minLaunchElevationDeg` so shots always arc upward visibly.
+4. Listens via `Projectile.onImpact` for the actual impact position and stores it for the next shot's correction. A `shotImpactTimeout` ends `WaitForImpact` if nothing is heard back.
+
+The line-of-sight raycast walks all hits in distance order and returns clear only if the *first non-self* hit is the player — this is needed because the firing tank's own colliders almost always sit between turret and player and would otherwise mask the LOS check.
 
 ### PowerBar is also the health bar
 
