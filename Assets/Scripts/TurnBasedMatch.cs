@@ -89,6 +89,7 @@ public class TurnBasedMatch : MonoBehaviour
     private Projectile _lastShot;
     private bool _navMeshDirty;
     private bool _gameOver;
+    private bool _resolving;
 
     private TextMeshPro _hud;
     private TextMeshPro _banner;
@@ -204,7 +205,9 @@ public class TurnBasedMatch : MonoBehaviour
             yield return AiTurn(p);
 
         _timeLeft = 0f;
+        _resolving = true;
         yield return ResolveShots(p);
+        _resolving = false;
         _active = null;
 
         if (_navMeshDirty && GameConfigManager.Instance != null)
@@ -507,9 +510,11 @@ public class TurnBasedMatch : MonoBehaviour
         _hud.transform.position = anchor;
         Billboard(_hud.transform, cam);
 
-        string status = _active.human
-            ? $"{Mathf.CeilToInt(Mathf.Max(0f, _timeLeft))}s   Fuel {Mathf.RoundToInt(100f * Mathf.Clamp01(_active.drive.DriveBudget / humanFuel))}%"
-            : "aiming...";
+        string status = _resolving
+            ? "shot fired"
+            : _active.human
+                ? $"{Mathf.CeilToInt(Mathf.Max(0f, _timeLeft))}s   Fuel {Mathf.RoundToInt(100f * Mathf.Clamp01(_active.drive.DriveBudget / humanFuel))}%"
+                : "aiming...";
         _hud.text = $"<color=#{ColorUtility.ToHtmlStringRGB(_active.color)}>{_active.name}</color>\n<size=70%>{status}\nWind {Projectile.Wind.magnitude:F1}</size>";
         _hud.color = Color.white;
 
