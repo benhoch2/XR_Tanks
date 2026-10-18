@@ -56,12 +56,19 @@ public class TankFlip : MonoBehaviour
     private void PerformResetAndBounce()
     {
         // Both-controller pulse so the reset feels weighty. Triggered once when the
-        // 3-second hold completes (not while the timer is counting up).
+        // hold completes (not while the timer is counting up).
         Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.4f, 0.7f, 0.18f);
         Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.4f, 0.7f, 0.18f);
 
-        // Reset rotation to zero (relative to parent if any).
-        transform.localRotation = Quaternion.identity;
+        // Stand upright but keep the heading. Resetting to identity also snapped the tank
+        // to face world +Z. If the nose points straight up or down, the up axis (which then
+        // lies flat) gives the heading instead.
+        Vector3 heading = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+        if (heading.sqrMagnitude < 0.001f)
+            heading = Vector3.ProjectOnPlane(transform.up, Vector3.up);
+        if (heading.sqrMagnitude < 0.001f)
+            heading = Vector3.forward;
+        transform.rotation = Quaternion.LookRotation(heading, Vector3.up);
 
         // Ensure we have Rigidbody reference
         if (rb == null) rb = GetComponent<Rigidbody>();

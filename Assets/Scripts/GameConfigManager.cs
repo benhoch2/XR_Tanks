@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Meta.XR.ImmersiveDebugger;
 using Meta.XR.ImmersiveDebugger.UserInterface;
 using Meta.XR.ImmersiveDebugger.UserInterface.Generic;
-using Meta.XR.MRUtilityKit;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
@@ -34,7 +33,8 @@ public class GameConfigManager : MonoBehaviour
     public bool pauseWhenConfigMenuOpen = true;
 
     [Header("NavMesh")]
-    [Tooltip("Layers to include when building the runtime NavMesh from MRUK colliders. " +
+    [Tooltip("Layers to include when building the runtime NavMesh from the environment's colliders " +
+             "(MRUK room or VR terrain). " +
              "Default = the Default layer only. If obstacle prefabs are placed on Walls, " +
              "Obstacles, or any other layer, add those layers here or they'll be missing " +
              "from the NavMesh and enemies will walk through them.")]
@@ -48,12 +48,27 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Testing")]
     public bool playerInvulnerable = false;
 
+    // VR scene only (read by PlayerRigFollow / TerrainEnvironment). Kept here rather than on
+    // those scene components so the values survive the scene reload after every round.
+    [Header("VR")]
+    [Tooltip("Comfort mode: the camera rig jumps to keep up with the tank instead of gliding.")]
+    [DebugMember(Category = "VR")]
+    public bool vrSnapFollow = false;
+
+    [Tooltip("Generate a new mountain map every round. Turn off to keep replaying the current seed.")]
+    [DebugMember(Category = "VR")]
+    public bool vrNewTerrainEachRound = true;
+
+    [Tooltip("Seed of the current mountain map. Written each round while vrNewTerrainEachRound is on.")]
+    [DebugMember(Min = 0, Max = 99999, Category = "VR")]
+    public int vrTerrainSeed = 1;
+
     [Header("Controls — Right")]
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Trigger")]
     public string ctrlRTrigger = "Fire (hold to charge)";
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "A Button")]
     public string ctrlA = "Cycle projectile";
-    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "B Button (hold 3s)")]
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "B Button (hold 1s)")]
     public string ctrlB = "Reset / flip tank";
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "R Stick X")]
     public string ctrlRStickX = "Rotate turret";
@@ -67,6 +82,15 @@ public class GameConfigManager : MonoBehaviour
     public string ctrlLStickY = "Drive forward / back";
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "L Stick X")]
     public string ctrlLStickX = "Turn left / right";
+
+    [Header("Controls — VR only")]
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "X Button (VR)")]
+    public string ctrlX = "Recenter behind tank";
+    [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "Grip (VR)")]
+    public string ctrlGrip = "Hold + move hand to drag yourself";
+
+    private const string MRSceneName = "SampleScene";
+    private const string VRSceneName = "VRMountains";
 
     void Awake()
     {
@@ -232,12 +256,44 @@ public class GameConfigManager : MonoBehaviour
 
         _sceneStartupTriggered = true;
         Time.timeScale = 1f;
-        ConfigureMetaXRRuntime();
-        FindAndApplySpawnerConfig();
-        _spawnCoroutine = StartCoroutine(SpawnPlayerTankNearHeadset());
+
+        GameEnvironment environment = FindSceneEnvironment();
+        ConfigureMetaXRRuntime(environment.SuppressBoundary);
+        environment.ApplySpawnCounts(numberOfEnemies, numberOfCrates);
+        _spawnCoroutine = StartCoroutine(RunSceneStartup(environment));
     }
 
-    private void ConfigureMetaXRRuntime()
+    /// <summary>
+    /// The world is chosen by the scene, not by fields on this manager: the manager outlives
+    /// scene switches, so its own serialized state comes from whichever scene booted first.
+    /// </summary>
+    private static GameEnvironment FindSceneEnvironment()
+    {
+        GameEnvironment environment = FindAnyObjectByType<GameEnvironment>();
+        if (environment != null)
+            return environment;
+
+        // SampleScene predates the environment split and has no GameEnvironment. Created in
+        // the active scene, so it is destroyed with it like any other scene object.
+        return new GameObject("MR Room Environment").AddComponent<MRRoomEnvironment>();
+    }
+
+    private IEnumerator RunSceneStartup(GameEnvironment environment)
+    {
+        // The environment's coroutines run on the environment itself so a scene unload
+        // stops them along with it; this coroutine is stopped via _spawnCoroutine.
+        yield return environment.StartCoroutine(environment.PrepareWorld());
+
+        AsyncOperation navMeshBuild = BeginRuntimeNavMeshBuild(environment);
+        if (navMeshBuild != null)
+            yield return navMeshBuild;
+
+        _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
+
+        yield return environment.StartCoroutine(environment.SpawnActors());
+    }
+
+    private void ConfigureMetaXRRuntime(bool suppressBoundary)
     {
 #if UNITY_EDITOR
         Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
@@ -245,189 +301,60 @@ public class GameConfigManager : MonoBehaviour
 
         foreach (var manager in FindObjectsByType<OVRManager>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
-            manager.shouldBoundaryVisibilityBeSuppressed = true;
+            manager.shouldBoundaryVisibilityBeSuppressed = suppressBoundary;
         }
     }
 
-    private void FindAndApplySpawnerConfig()
+    /// <summary>
+    /// Starts an asynchronous NavMesh build over the environment's colliders. Async because a
+    /// synchronous build stalls the frame, which in a headset shows as a frozen view.
+    /// Returns null if there is nothing to build from.
+    /// </summary>
+    private AsyncOperation BeginRuntimeNavMeshBuild(GameEnvironment environment)
     {
-        foreach (var spawner in FindObjectsByType<FindSpawnPositions>(FindObjectsSortMode.None))
-        {
-            if (spawner.SpawnObject == null) continue;
-
-            string objName = spawner.SpawnObject.name;
-
-            if (objName.Contains("TargetTank"))
-                spawner.SpawnAmount = numberOfEnemies;
-            else if (objName.Contains("TargetBox"))
-                spawner.SpawnAmount = numberOfCrates;
-        }
-    }
-
-    private IEnumerator SpawnPlayerTankNearHeadset()
-    {
-        // Wait for MRUK room to be available
-        MRUKRoom room = null;
-        for (int i = 0; i < 600; i++)
-        {
-            if (MRUK.Instance != null)
-                room = MRUK.Instance.GetCurrentRoom();
-            if (room != null) break;
-            yield return null;
-        }
-
-        if (room == null)
-        {
-            Debug.LogWarning("[GameConfig] MRUK room not found; using fallback Floor collider and editor tank spawn.");
-            ConfigureFallbackFloor(true, null);
-            SpawnPlayerTankFallback();
-            BuildRuntimeNavMesh(null);
-            _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
-            yield break;
-        }
-
-        // Align the fallback scene Floor visually to the MRUK floor, but disable it during MRUK-based spawning
-        // so the large plane does not affect spawn selection or room-bounded navigation.
-        MRUKAnchor floorAnchor = room.FloorAnchor;
-        float? gameplayFloorY = null;
-        if (floorAnchor != null)
-        {
-            gameplayFloorY = floorAnchor.transform.position.y;
-            ConfigureFallbackFloor(false, gameplayFloorY);
-        }
-
-        // Wait for Effect Mesh colliders to generate
-        for (int i = 0; i < 60; i++)
-        {
-            if (Physics.Raycast(new Vector3(0, 5f, 0), Vector3.down, 10f))
-                break;
-            yield return null;
-        }
-
-        BuildRuntimeNavMesh(room.transform);
-        _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
-
-        // Find the TankSpawner and spawn 5 candidates
-        FindSpawnPositions tankSpawner = null;
-        foreach (var spawner in FindObjectsByType<FindSpawnPositions>(FindObjectsSortMode.None))
-        {
-            if (spawner.SpawnObject != null && spawner.SpawnObject.name.Contains("TankFree"))
-            {
-                tankSpawner = spawner;
-                break;
-            }
-        }
-
-        if (tankSpawner == null)
-        {
-            Debug.LogWarning("[GameConfig] TankSpawner not found.");
-            yield break;
-        }
-
-        tankSpawner.SpawnAmount = 5;
-        tankSpawner.StartSpawn(room);
-
-        // Re-enable the stable gameplay floor immediately after spawn placement.
-        if (gameplayFloorY.HasValue)
-            ConfigureFallbackFloor(true, gameplayFloorY);
-
-        // Wait for tanks to appear
-        ShootingControls[] candidates = null;
-        for (int i = 0; i < 120; i++)
-        {
-            candidates = FindObjectsByType<ShootingControls>(FindObjectsSortMode.None);
-            if (candidates.Length >= 5) break;
-            yield return null;
-        }
-
-        if (candidates == null || candidates.Length == 0)
-        {
-            Debug.LogWarning("[GameConfig] No player tanks found after StartSpawn.");
-            yield break;
-        }
-
-        // Pick the candidate closest to the headset (horizontal distance)
-        Camera cam = Camera.main;
-        Vector3 headPos = cam != null ? cam.transform.position : Vector3.zero;
-
-        ShootingControls closest = candidates[0];
-        float bestDist = float.MaxValue;
-        foreach (var tank in candidates)
-        {
-            Vector3 diff = tank.transform.position - headPos;
-            diff.y = 0;
-            float dist = diff.sqrMagnitude;
-            if (dist < bestDist)
-            {
-                bestDist = dist;
-                closest = tank;
-            }
-        }
-
-        // Destroy the other candidates
-        foreach (var tank in candidates)
-        {
-            if (tank != closest)
-                Destroy(tank.gameObject);
-        }
-
-        // Face the tank toward the headset's forward direction
-        if (cam != null)
-        {
-            Vector3 forward = cam.transform.forward;
-            forward.y = 0;
-            if (forward.sqrMagnitude > 0.001f)
-                closest.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
-        }
-
-        // Ensure the bottom of the tank sits slightly above the MRUK floor
-        if (floorAnchor != null)
-        {
-            float floorY = floorAnchor.transform.position.y;
-            Collider tankCollider = closest.GetComponentInChildren<Collider>();
-            if (tankCollider != null)
-            {
-                Bounds bounds = tankCollider.bounds;
-                float clearance = 0.01f;
-                float offsetY = (floorY + clearance) - bounds.min.y;
-
-                if (Mathf.Abs(offsetY) > 0.001f)
-                {
-                    closest.transform.position += Vector3.up * offsetY;
-                }
-            }
-        }
-
-    }
-
-    private void ConfigureFallbackFloor(bool enableCollider, float? floorY)
-    {
-        GameObject floorObj = GetGameplayFloor();
-        if (floorObj == null) return;
-
-        if (floorY.HasValue)
-        {
-            Vector3 pos = floorObj.transform.position;
-            pos.y = floorY.Value;
-            floorObj.transform.position = pos;
-        }
-
-        Collider floorCollider = floorObj.GetComponent<Collider>();
-        if (floorCollider != null)
-            floorCollider.enabled = enableCollider;
-    }
-
-    private void BuildRuntimeNavMesh(Transform sourceRoot)
-    {
+        Transform sourceRoot = environment.NavMeshSourceRoot;
         List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
         NavMeshBuilder.CollectSources(sourceRoot, navMeshLayerMask, NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
 
         if (sources.Count == 0)
         {
             Debug.LogWarning("[NavMesh] No navmesh sources were collected.");
-            return;
+            return null;
         }
 
+        Bounds bounds = environment.NavMeshBounds ?? ComputeColliderBounds(sourceRoot);
+
+        if (_navMeshDataInstance.valid)
+            _navMeshDataInstance.Remove();
+
+        NavMeshBuildSettings settings = CreateTankNavMeshSettings();
+        environment.TuneNavMesh(ref settings);
+
+        NavMeshData data = new NavMeshData(settings.agentTypeID);
+        _navMeshDataInstance = NavMesh.AddNavMeshData(data);
+        return NavMeshBuilder.UpdateNavMeshDataAsync(data, settings, sources, bounds);
+    }
+
+    /// <summary>
+    /// Tank-scale NavMesh settings every environment starts from before its TuneNavMesh.
+    /// Public so the editor terrain validation builds the same NavMesh the game does.
+    /// </summary>
+    public static NavMeshBuildSettings CreateTankNavMeshSettings()
+    {
+        NavMeshBuildSettings settings = NavMesh.GetSettingsByIndex(0);
+        settings.agentRadius = 0.12f;
+        settings.agentHeight = 0.25f;
+        settings.agentClimb = 0.2f;
+        settings.agentSlope = 60f;
+        settings.overrideVoxelSize = true;
+        settings.voxelSize = 0.03f;
+        settings.overrideTileSize = true;
+        settings.tileSize = 64;
+        return settings;
+    }
+
+    private static Bounds ComputeColliderBounds(Transform sourceRoot)
+    {
         Bounds bounds = new Bounds(Vector3.zero, new Vector3(20f, 10f, 20f));
         bool hasBounds = false;
 
@@ -451,29 +378,7 @@ public class GameConfigManager : MonoBehaviour
             }
         }
         bounds.Expand(new Vector3(1f, 1f, 1f));
-
-        if (_navMeshDataInstance.valid)
-            _navMeshDataInstance.Remove();
-
-        NavMeshBuildSettings settings = NavMesh.GetSettingsByIndex(0);
-        settings.agentRadius = 0.12f;
-        settings.agentHeight = 0.25f;
-        settings.agentClimb = 0.2f;
-        settings.agentSlope = 60f;
-        settings.overrideVoxelSize = true;
-        settings.voxelSize = 0.03f;
-        settings.overrideTileSize = true;
-        settings.tileSize = 64;
-
-        NavMeshData data = NavMeshBuilder.BuildNavMeshData(settings, sources, bounds, Vector3.zero, Quaternion.identity);
-        if (data != null)
-        {
-            _navMeshDataInstance = NavMesh.AddNavMeshData(data);
-        }
-        else
-        {
-            Debug.LogWarning("[NavMesh] BuildNavMeshData returned null.");
-        }
+        return bounds;
     }
 
     private IEnumerator ConfigureEnemyTankMovementWhenReady()
@@ -483,7 +388,7 @@ public class GameConfigManager : MonoBehaviour
             bool foundEnemy = false;
             foreach (var target in FindObjectsByType<Target>(FindObjectsSortMode.None))
             {
-                if (target != null && target.maxHitPoints > 0)
+                if (IsEnemy(target))
                 {
                     foundEnemy = true;
                     break;
@@ -498,7 +403,7 @@ public class GameConfigManager : MonoBehaviour
 
         foreach (var target in FindObjectsByType<Target>(FindObjectsSortMode.None))
         {
-            if (target == null || target.maxHitPoints <= 0)
+            if (!IsEnemy(target))
                 continue;
 
             Transform root = target.transform;
@@ -575,11 +480,21 @@ public class GameConfigManager : MonoBehaviour
         int alive = 0;
         foreach (var t in FindObjectsByType<Target>(FindObjectsSortMode.None))
         {
-            if (t == null || t.maxHitPoints <= 0) continue;
-            if (t.GetComponent<ShootingControls>() != null) continue;
-            alive++;
+            if (IsEnemy(t))
+                alive++;
         }
         return alive;
+    }
+
+    /// <summary>
+    /// An enemy tank: a Target with hit points (crates have none) that isn't the player
+    /// (the player tank is the one carrying ShootingControls).
+    /// </summary>
+    private static bool IsEnemy(Target target)
+    {
+        return target != null
+            && target.maxHitPoints > 0
+            && target.GetComponent<ShootingControls>() == null;
     }
 
     public void OnEnemyKilled()
@@ -603,51 +518,27 @@ public class GameConfigManager : MonoBehaviour
         ReloadScene();
     }
 
-    private void SpawnPlayerTankFallback()
-    {
-        FindSpawnPositions tankSpawner = null;
-        foreach (var spawner in FindObjectsByType<FindSpawnPositions>(FindObjectsSortMode.None))
-        {
-            if (spawner.SpawnObject != null && spawner.SpawnObject.name.Contains("TankFree"))
-            {
-                tankSpawner = spawner;
-                break;
-            }
-        }
-
-        if (tankSpawner == null || tankSpawner.SpawnObject == null)
-        {
-            Debug.LogWarning("[GameConfig] TankSpawner not found for fallback spawn.");
-            return;
-        }
-
-        Camera cam = Camera.main;
-        Vector3 spawnPos = cam != null ? cam.transform.position + cam.transform.forward * 2f : new Vector3(0f, 0f, 2f);
-
-        GameObject floorObj = GetGameplayFloor();
-        if (floorObj != null)
-            spawnPos.y = floorObj.transform.position.y + 0.01f;
-
-        Vector3 forward = cam != null ? cam.transform.forward : Vector3.forward;
-        forward.y = 0f;
-        if (forward.sqrMagnitude < 0.001f)
-            forward = Vector3.forward;
-
-        GameObject tank = Instantiate(tankSpawner.SpawnObject, spawnPos, Quaternion.LookRotation(forward, Vector3.up));
-        Collider tankCollider = tank.GetComponentInChildren<Collider>();
-        if (floorObj != null && tankCollider != null)
-        {
-            float offsetY = (floorObj.transform.position.y + 0.01f) - tankCollider.bounds.min.y;
-            tank.transform.position += Vector3.up * offsetY;
-        }
-    }
-
     [DebugMember(Category = "Game Config")]
     public void ReloadScene()
     {
         ResetSceneStartupState();
         Scene active = SceneManager.GetActiveScene();
         SceneManager.LoadScene(active.name);
+    }
+
+    /// <summary>Toggles between the MR room scene and the VR mountain scene.</summary>
+    [DebugMember(Category = "Game Config")]
+    public void SwitchMRVR()
+    {
+        string target = SceneManager.GetActiveScene().name == VRSceneName ? MRSceneName : VRSceneName;
+        if (!Application.CanStreamedLevelBeLoaded(target))
+        {
+            Debug.LogWarning($"[GameConfig] Scene '{target}' is not in the build settings; cannot switch.");
+            return;
+        }
+
+        ResetSceneStartupState();
+        SceneManager.LoadScene(target);
     }
 
     [DebugMember(Category = "Game Config")]
@@ -661,6 +552,9 @@ public class GameConfigManager : MonoBehaviour
         pauseWhenConfigMenuOpen = _defaults.pauseWhenConfigMenuOpen;
         enemyShootingEnabled = _defaults.enemyShootingEnabled;
         playerInvulnerable = _defaults.playerInvulnerable;
+        vrSnapFollow = _defaults.vrSnapFollow;
+        vrNewTerrainEachRound = _defaults.vrNewTerrainEachRound;
+        vrTerrainSeed = _defaults.vrTerrainSeed;
 
         SaveConfig();
 
@@ -676,6 +570,8 @@ public class GameConfigManager : MonoBehaviour
         public int numberOfEnemies, numberOfCrates;
         public int projectileMinSpeed, projectileMaxSpeed, powerUpDuration;
         public bool pauseWhenConfigMenuOpen, enemyShootingEnabled, playerInvulnerable;
+        public bool vrSnapFollow, vrNewTerrainEachRound;
+        public int vrTerrainSeed;
     }
 
     private ConfigDefaults _defaults;
@@ -690,6 +586,9 @@ public class GameConfigManager : MonoBehaviour
         _defaults.pauseWhenConfigMenuOpen = pauseWhenConfigMenuOpen;
         _defaults.enemyShootingEnabled = enemyShootingEnabled;
         _defaults.playerInvulnerable = playerInvulnerable;
+        _defaults.vrSnapFollow = vrSnapFollow;
+        _defaults.vrNewTerrainEachRound = vrNewTerrainEachRound;
+        _defaults.vrTerrainSeed = vrTerrainSeed;
     }
 
     private void LoadPersistedConfig()
@@ -702,6 +601,9 @@ public class GameConfigManager : MonoBehaviour
         pauseWhenConfigMenuOpen = PlayerPrefs.GetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0) != 0;
         enemyShootingEnabled = PlayerPrefs.GetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0) != 0;
         playerInvulnerable = PlayerPrefs.GetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0) != 0;
+        vrSnapFollow = PlayerPrefs.GetInt(PrefPrefix + nameof(vrSnapFollow), vrSnapFollow ? 1 : 0) != 0;
+        vrNewTerrainEachRound = PlayerPrefs.GetInt(PrefPrefix + nameof(vrNewTerrainEachRound), vrNewTerrainEachRound ? 1 : 0) != 0;
+        vrTerrainSeed = PlayerPrefs.GetInt(PrefPrefix + nameof(vrTerrainSeed), vrTerrainSeed);
     }
 
     private void SaveConfig()
@@ -714,6 +616,9 @@ public class GameConfigManager : MonoBehaviour
         PlayerPrefs.SetInt(PrefPrefix + nameof(pauseWhenConfigMenuOpen), pauseWhenConfigMenuOpen ? 1 : 0);
         PlayerPrefs.SetInt(PrefPrefix + nameof(enemyShootingEnabled), enemyShootingEnabled ? 1 : 0);
         PlayerPrefs.SetInt(PrefPrefix + nameof(playerInvulnerable), playerInvulnerable ? 1 : 0);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(vrSnapFollow), vrSnapFollow ? 1 : 0);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(vrNewTerrainEachRound), vrNewTerrainEachRound ? 1 : 0);
+        PlayerPrefs.SetInt(PrefPrefix + nameof(vrTerrainSeed), vrTerrainSeed);
         PlayerPrefs.Save();
     }
 }

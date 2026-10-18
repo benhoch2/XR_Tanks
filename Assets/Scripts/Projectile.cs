@@ -35,6 +35,10 @@ public class Projectile : MonoBehaviour
     [Tooltip("Explosive shots ignore floor-like collisions only when they happen clearly above the gameplay floor.")]
     public float elevatedFloorIgnoreThreshold = 0.05f;
 
+    [Tooltip("Safety net: destroyed this many seconds after spawning even if nothing resolved it, " +
+             "e.g. a shot that flew off the edge of the VR map. 0 = never.")]
+    public float maxLifetime = 30f;
+
     [Header("Physics")]
     [Tooltip("0 = no bounce, 1 = perfectly elastic. Applied as a runtime PhysicsMaterial on this projectile's collider when it spawns.")]
     [Range(0f, 1f)]
@@ -65,6 +69,12 @@ public class Projectile : MonoBehaviour
             frictionCombine = PhysicsMaterialCombine.Average,
         };
         col.sharedMaterial = mat;
+    }
+
+    private void Start()
+    {
+        if (maxLifetime > 0f)
+            Destroy(gameObject, maxLifetime);
     }
 
     private void OnCollisionEnter(Collision collision)

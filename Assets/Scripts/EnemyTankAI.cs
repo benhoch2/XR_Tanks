@@ -36,6 +36,12 @@ public class EnemyTankAI : MonoBehaviour
     public float stopRange = 1.25f;
     [Tooltip("How far ahead the obstacle sphere-cast looks before this tank decides it's blocked.")]
     public float obstacleCheckDistance = 0.25f;
+    [Tooltip("Surfaces flatter than this (degrees) count as drivable ground, not obstacles, in the " +
+             "blocked-ahead check. Keep in line with the runtime NavMesh slope.")]
+    [SerializeField] private float walkableSlopeDeg = 35f;
+    [Tooltip("How fast the body model tilts to match the ground slope, in degrees per second. " +
+             "Only the model tilts; the root and its NavMeshAgent stay upright.")]
+    [SerializeField] private float groundAlignSpeed = 120f;
 
     [Header("AI")]
     [Tooltip("Per-prefab AI mode. ChaseWander tanks pursue the player when in chase range; PatrolScan tanks roam, scan, then fire volleys.")]
@@ -96,6 +102,8 @@ public class EnemyTankAI : MonoBehaviour
     private PatrolScanState _patrolScanState = PatrolScanState.PickDirection;
     private Vector3 _patrolDirection = Vector3.forward;
     private Transform _turretTransform;
+    private Transform _bodyVisual;
+    private Quaternion _bodyVisualBaseLocalRotation;
     private float _scanCenterYaw;
     private float _scanTargetYaw;
     private float _scanDirection = 1f;
@@ -127,6 +135,9 @@ public class EnemyTankAI : MonoBehaviour
         _agent = GetComponent<NavMeshAgent>();
         _homePosition = transform.position;
         _turretTransform = FindTurretTransform();
+        _bodyVisual = FindBodyVisual();
+        if (_bodyVisual != null)
+            _bodyVisualBaseLocalRotation = _bodyVisual.localRotation;
         _selfColliders = GetComponentsInChildren<Collider>(true);
 
         if (_agent != null)
@@ -185,6 +196,34 @@ public class EnemyTankAI : MonoBehaviour
                 UpdateChaseWanderMode();
                 break;
         }
+    }
+
+    private void LateUpdate()
+    {
+        if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh)
+            return;
+
+        AlignBodyToGround();
+    }
+
+    /// <summary>
+    /// Tilts the body model to the slope underneath. The agent keeps the root upright
+    /// (updateRotation is off and DriveLikeTank only yaws), which on terrain would leave the
+    /// hull floating level over hillsides. Turret aim is composed in its parent's frame, so
+    /// tilting the model doesn't throw the barrel off the firing arc.
+    /// </summary>
+    private void AlignBodyToGround()
+    {
+        if (_bodyVisual == null)
+            return;
+
+        Vector3 groundUp = Vector3.up;
+        if (GroundProbe.TryCastDown(transform, transform.position + Vector3.up * 0.1f, 0.3f, out RaycastHit ground))
+            groundUp = ground.normal;
+
+        Quaternion tilt = Quaternion.FromToRotation(transform.up, groundUp);
+        Quaternion target = tilt * transform.rotation * _bodyVisualBaseLocalRotation;
+        _bodyVisual.rotation = Quaternion.RotateTowards(_bodyVisual.rotation, target, groundAlignSpeed * Time.deltaTime);
     }
 
     private void EnsurePlayerCached()
@@ -425,7 +464,7 @@ public class EnemyTankAI : MonoBehaviour
             horizontalDistance = new Vector2(virtualTarget.x - firePos.x, virtualTarget.z - firePos.z).magnitude;
         }
 
-        float launchSpeed = ComputeLaunchSpeed(horizontalDistance);
+        float launchSpeed = ComputeLaunchSpeed(horizontalDistance, virtualTarget.y - firePos.y);
         SolveBallistic(firePos, virtualTarget, launchSpeed, out Vector3 launchVelocity);
         launchVelocity = EnforceMinElevation(launchVelocity);
 
@@ -483,12 +522,16 @@ public class EnemyTankAI : MonoBehaviour
         return source.position + source.forward * 0.15f + Vector3.up * 0.08f;
     }
 
-    private float ComputeLaunchSpeed(float horizontalDistance)
+    private float ComputeLaunchSpeed(float horizontalDistance, float heightDelta)
     {
-        // For zero height difference, v² = g·d gives a 45° low-arc. Scale up slightly for a flatter,
-        // snappier arc, and clamp to the configured range so the cannon feels consistent.
+        // The slowest shot that reaches (d, h) at all needs v² = g·(h + √(h² + d²)); at h = 0
+        // that is the 45° v² = g·d. Basing the speed on it keeps uphill shots from falling
+        // short on terrain. Scale up slightly for a flatter, snappier arc, and clamp to the
+        // configured range so the cannon feels consistent.
         float g = Mathf.Max(0.01f, -Physics.gravity.y);
-        float ideal = Mathf.Sqrt(g * Mathf.Max(0.1f, horizontalDistance)) * 1.25f;
+        float d = Mathf.Max(0.1f, horizontalDistance);
+        float minSpeedSquared = g * (heightDelta + Mathf.Sqrt(heightDelta * heightDelta + d * d));
+        float ideal = Mathf.Sqrt(Mathf.Max(0f, minSpeedSquared)) * 1.25f;
         return Mathf.Clamp(ideal, minShotSpeed, maxShotSpeed);
     }
 
@@ -604,7 +647,7 @@ public class EnemyTankAI : MonoBehaviour
         // tracks the actual firing arc.
         float horizDist = toTargetHoriz.magnitude;
         Vector3 firePos = GetFirePosition();
-        float launchSpeed = ComputeLaunchSpeed(horizDist);
+        float launchSpeed = ComputeLaunchSpeed(horizDist, worldPos.y - firePos.y);
         SolveBallistic(firePos, worldPos, launchSpeed, out Vector3 launchVelocity);
         launchVelocity = EnforceMinElevation(launchVelocity);
 
@@ -771,6 +814,11 @@ public class EnemyTankAI : MonoBehaviour
             if (hit.transform == transform || hit.transform.IsChildOf(transform))
                 return false;
 
+            // Rising ground the tank can drive up is not an obstacle — without this, every
+            // hill on the VR terrain reads as "blocked" and PatrolScan tanks never leave the valley.
+            if (hit.normal.y >= Mathf.Cos(walkableSlopeDeg * Mathf.Deg2Rad))
+                return false;
+
             return true;
         }
 
@@ -854,6 +902,18 @@ public class EnemyTankAI : MonoBehaviour
         }
 
         return null;
+    }
+
+    /// <summary>The model is the root's direct child that contains the turret (a nested prefab instance).</summary>
+    private Transform FindBodyVisual()
+    {
+        if (_turretTransform == null || _turretTransform == transform)
+            return null;
+
+        Transform t = _turretTransform;
+        while (t.parent != null && t.parent != transform)
+            t = t.parent;
+        return t.parent == transform ? t : null;
     }
 
 #if UNITY_EDITOR

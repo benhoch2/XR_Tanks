@@ -19,6 +19,11 @@ public class TowerController : MonoBehaviour
              "they hold B to flip back upright.")]
     [SerializeField] private float maxDriveTiltDegrees = 60f;
 
+    [Tooltip("Steepest ground (degrees) the tank can drive up. Steeper slopes block forward " +
+             "motion uphill (downhill and across still work), which is what makes the VR " +
+             "terrain's mountain rim a wall. Keep in line with the enemies' NavMesh slope.")]
+    [SerializeField] private float maxClimbSlopeDegrees = 35f;
+
     [Header("Knockback")]
     [Tooltip("Effective mass for hit-impact knockback. Higher = less slide from the same hit.")]
     [SerializeField] private float mass = 1f;
@@ -104,7 +109,24 @@ public class TowerController : MonoBehaviour
         if (Mathf.Abs(turnInput) > 0.01f)
             transform.Rotate(Vector3.up, turnInput * rotationSpeed * Time.deltaTime);
         if (Mathf.Abs(moveInput) > 0.01f)
-            transform.position += transform.forward * moveInput * moveSpeed * Time.deltaTime;
+        {
+            Vector3 step = transform.forward * moveInput * moveSpeed * Time.deltaTime;
+
+            // Drive along the ground under the leading edge rather than straight along the
+            // body's forward, so slopes are climbed instead of pushed into and resolved by
+            // physics depenetration. No ground found (airborne) = old behaviour.
+            Vector3 probeOrigin = transform.position
+                                  + Vector3.ProjectOnPlane(step, Vector3.up).normalized * 0.05f
+                                  + Vector3.up * 0.15f;
+            if (GroundProbe.TryCastDown(transform, probeOrigin, 0.35f, out RaycastHit ground))
+            {
+                step = Vector3.ProjectOnPlane(step, ground.normal).normalized * step.magnitude;
+                if (step.y > 0f && Vector3.Angle(ground.normal, Vector3.up) > maxClimbSlopeDegrees)
+                    return;
+            }
+
+            transform.position += step;
+        }
     }
 
     private bool IsTippedOver()
