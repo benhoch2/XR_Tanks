@@ -38,6 +38,30 @@ public class PlayerRigFollow : MonoBehaviour
     [Tooltip("How high above the terrain grip-drag can lift the player, in meters.")]
     [SerializeField] private float maxHeightOffset = 4f;
 
+    [Header("Free look (turn-based scouting)")]
+    [Tooltip("Horizontal flying speed with the left stick while FreeLook is on, in m/s.")]
+    [SerializeField] private float freeLookSpeed = 3f;
+    [Tooltip("Rise / sink speed with the right stick's up/down while FreeLook is on, in m/s.")]
+    [SerializeField] private float freeLookVerticalSpeed = 1.5f;
+    [Tooltip("Snap-turn step with the right stick's left/right while FreeLook is on, in degrees.")]
+    [SerializeField] private float snapTurnDegrees = 30f;
+
+    /// <summary>
+    /// Turn-based scouting: the sticks fly the player around (left = move relative to where
+    /// they look, right = snap-turn / up-down). Only on while the tank's own controls are off,
+    /// since they share the sticks. Tank following is paused (target null) meanwhile.
+    /// </summary>
+    public bool FreeLook { get; set; }
+
+    /// <summary>Where free look may take the head (world XZ). Null = anywhere.</summary>
+    public Rect? FreeLookArea { get; set; }
+
+    /// <summary>Drops any height the player rose to (grip-drag or free look) back to standing on the ground.</summary>
+    public void ResetHeight()
+    {
+        _heightOffset = 0f;
+    }
+
     private OVRCameraRig _rig;
     private Transform _target;
     private System.Func<Vector3, float> _groundHeight;
@@ -45,6 +69,9 @@ public class PlayerRigFollow : MonoBehaviour
     private InputAction _recenterAction;
     private InputAction _leftGripAction;
     private InputAction _rightGripAction;
+    private InputAction _leftStickAction;
+    private InputAction _rightStickAction;
+    private bool _snapTurnHeld;
 
     private Vector3 _followVelocity;
     private float _heightVelocity;
@@ -62,9 +89,13 @@ public class PlayerRigFollow : MonoBehaviour
         _recenterAction = new InputAction("Recenter", InputActionType.Button, "<XRController>{LeftHand}/primaryButton");
         _leftGripAction = new InputAction("DragLeft", InputActionType.Button, "<XRController>{LeftHand}/gripPressed");
         _rightGripAction = new InputAction("DragRight", InputActionType.Button, "<XRController>{RightHand}/gripPressed");
+        _leftStickAction = new InputAction("FreeLookMove", InputActionType.Value, "<XRController>{LeftHand}/thumbstick");
+        _rightStickAction = new InputAction("FreeLookTurn", InputActionType.Value, "<XRController>{RightHand}/thumbstick");
         _recenterAction.Enable();
         _leftGripAction.Enable();
         _rightGripAction.Enable();
+        _leftStickAction.Enable();
+        _rightStickAction.Enable();
     }
 
     private void OnDisable()
@@ -78,6 +109,12 @@ public class PlayerRigFollow : MonoBehaviour
         _recenterAction = null;
         _leftGripAction = null;
         _rightGripAction = null;
+        _leftStickAction?.Disable();
+        _rightStickAction?.Disable();
+        _leftStickAction?.Dispose();
+        _rightStickAction?.Dispose();
+        _leftStickAction = null;
+        _rightStickAction = null;
     }
 
     /// <summary>Starts following <paramref name="target"/>, using <paramref name="groundHeight"/> to find the floor under the head.</summary>
@@ -162,6 +199,9 @@ public class PlayerRigFollow : MonoBehaviour
         Vector3 rigPosition = transform.position;
         bool snapped = false;
 
+        if (FreeLook)
+            UpdateFreeLook(ref rigPosition, head, dt);
+
         if (!UpdateGripDrag(ref rigPosition) && _target != null)
         {
             Vector3 toTarget = Flat(_target.position - head.position);
@@ -196,6 +236,47 @@ public class PlayerRigFollow : MonoBehaviour
             : Mathf.SmoothDamp(transform.position.y, floorY, ref _heightVelocity, heightSmoothTime, Mathf.Infinity, dt);
 
         transform.position = rigPosition;
+    }
+
+    private void UpdateFreeLook(ref Vector3 rigPosition, Transform head, float dt)
+    {
+        Vector2 move = _leftStickAction.ReadValue<Vector2>();
+        Vector2 turn = _rightStickAction.ReadValue<Vector2>();
+
+        Vector3 forward = Flat(head.forward).normalized;
+        Vector3 right = Flat(head.right).normalized;
+        Vector3 step = (forward * move.y + right * move.x) * freeLookSpeed * dt;
+        rigPosition.x += step.x;
+        rigPosition.z += step.z;
+
+        if (FreeLookArea.HasValue)
+        {
+            // Keep the head over the map: shift the rig back by however far the head would leave it.
+            Rect area = FreeLookArea.Value;
+            Vector3 headAfter = head.position + (rigPosition - transform.position);
+            rigPosition.x += Mathf.Clamp(headAfter.x, area.xMin, area.xMax) - headAfter.x;
+            rigPosition.z += Mathf.Clamp(headAfter.z, area.yMin, area.yMax) - headAfter.z;
+        }
+
+        if (Mathf.Abs(turn.y) > 0.2f)
+            _heightOffset = Mathf.Clamp(_heightOffset + turn.y * freeLookVerticalSpeed * dt, 0f, maxHeightOffset);
+
+        // Snap turn (one step per flick) is far more comfortable than smooth turning in VR.
+        if (Mathf.Abs(turn.x) > 0.7f)
+        {
+            if (!_snapTurnHeld)
+            {
+                _snapTurnHeld = true;
+                // Rotating moves the rig; carry this frame's pending movement across it.
+                Vector3 pending = rigPosition - transform.position;
+                transform.RotateAround(head.position, Vector3.up, Mathf.Sign(turn.x) * snapTurnDegrees);
+                rigPosition = transform.position + pending;
+            }
+        }
+        else if (Mathf.Abs(turn.x) < 0.3f)
+        {
+            _snapTurnHeld = false;
+        }
     }
 
     /// <summary>

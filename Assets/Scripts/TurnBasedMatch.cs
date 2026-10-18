@@ -38,6 +38,9 @@ public class TurnBasedMatch : MonoBehaviour
     [Tooltip("A turn ends at the latest this long after the shot, even if a projectile is still around.")]
     [SerializeField] private float maxResolveSeconds = 15f;
     [SerializeField] private float pauseBetweenTurns = 1f;
+    [Tooltip("Seconds a human may fly around and scout the map before their turn starts " +
+             "(timer and fuel untouched meanwhile; A ends it early). 0 = off. One headset only.")]
+    [SerializeField] private float scoutSeconds = 10f;
 
     [Header("Wind")]
     [Tooltip("Strongest wind, as horizontal acceleration on projectiles (m/s²).")]
@@ -113,6 +116,8 @@ public class TurnBasedMatch : MonoBehaviour
     private bool _navMeshDirty;
     private bool _gameOver;
     private bool _resolving;
+    private bool _scouting;
+    private float _scoutLeft;
     private bool _hooked;
 
     // Online
@@ -288,12 +293,14 @@ public class TurnBasedMatch : MonoBehaviour
             ShowBanner($"{p.name}'s turn\n<size=60%>Pass the headset, then press A</size>", p.color);
             while (p.Alive && !_readyAction.WasPressedThisFrame())
                 yield return null;
+            // The press that ended the hand-off must not also end the scouting.
+            yield return null;
         }
-        else
-        {
-            ShowBanner("Your turn", p.color);
-            yield return new WaitForSeconds(1f);
-        }
+
+        yield return Scout(p);
+
+        ShowBanner(_humans.Count > 1 ? $"{p.name}: go!" : "Your turn", p.color);
+        yield return new WaitForSeconds(0.8f);
         HideBanner();
         if (!p.Alive)
             yield break;
@@ -318,6 +325,52 @@ public class TurnBasedMatch : MonoBehaviour
         SetHumanControl(p, false);
         _aimPreview.enabled = false;
         _lastShot = fired;
+    }
+
+    /// <summary>
+    /// Before a human turn: fly freely around the map (PlayerRigFollow.FreeLook) for up to
+    /// <see cref="scoutSeconds"/>, or until A, then snap back behind the tank. The tank's own
+    /// controls stay off meanwhile — they share the sticks.
+    /// </summary>
+    private IEnumerator Scout(Participant p)
+    {
+        if (scoutSeconds <= 0f || rigFollow == null || !p.Alive)
+            yield break;
+
+        _scouting = true;
+        _scoutLeft = scoutSeconds;
+        rigFollow.SetTarget(null);
+        rigFollow.FreeLook = true;
+
+        bool placed = false;
+        while (p.Alive && _scoutLeft > 0f && !_readyAction.WasPressedThisFrame())
+        {
+            _scoutLeft -= Time.deltaTime;
+            ShowBanner($"Look around  {Mathf.CeilToInt(_scoutLeft)}\n<size=55%>Left stick: fly   Right stick: turn / up-down   A: start turn</size>",
+                p.color, reposition: !placed || !BannerInView());
+            placed = true;
+            yield return null;
+        }
+
+        rigFollow.FreeLook = false;
+        _scouting = false;
+        HideBanner();
+        if (p.Alive)
+        {
+            rigFollow.ResetHeight();
+            rigFollow.SetTarget(p.tank);
+            rigFollow.SnapBehindTarget();
+        }
+    }
+
+    /// <summary>Whether the banner is still comfortably in front of the player (it only moves when it isn't).</summary>
+    private bool BannerInView()
+    {
+        Camera cam = Camera.main;
+        if (cam == null)
+            return true;
+        Vector3 toBanner = _banner.transform.position - cam.transform.position;
+        return toBanner.magnitude < 2.5f && Vector3.Angle(cam.transform.forward, toBanner) < 35f;
     }
 
     private IEnumerator AiTurn(Participant p)
@@ -914,7 +967,9 @@ public class TurnBasedMatch : MonoBehaviour
 
         int seconds = GameSession.IsOnline ? _state.SecondsLeft : Mathf.CeilToInt(Mathf.Max(0f, _timeLeft));
         bool showFuel = _active.drive != null && (!GameSession.IsOnline || _active.local);
-        string status = _resolving
+        string status = _scouting
+            ? $"scouting {Mathf.CeilToInt(Mathf.Max(0f, _scoutLeft))}s"
+            : _resolving
             ? "shot fired"
             : !_active.human
                 ? "aiming..."
@@ -993,17 +1048,21 @@ public class TurnBasedMatch : MonoBehaviour
         _aimPreview.enabled = true;
     }
 
-    private void ShowBanner(string message, Color color)
+    /// <param name="reposition">False keeps the banner where it is (just updates the text), so it isn't head-locked.</param>
+    private void ShowBanner(string message, Color color, bool reposition = true)
     {
         Camera cam = Camera.main;
         if (cam == null)
             return;
 
-        Vector3 forward = cam.transform.forward;
-        forward.y = 0f;
-        if (forward.sqrMagnitude < 0.0001f)
-            forward = Vector3.forward;
-        _banner.transform.position = cam.transform.position + forward.normalized * 1.2f + Vector3.up * 0.1f;
+        if (reposition)
+        {
+            Vector3 forward = cam.transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.forward;
+            _banner.transform.position = cam.transform.position + forward.normalized * 1.2f + Vector3.up * 0.1f;
+        }
         Billboard(_banner.transform, cam);
         _banner.text = message;
         _banner.color = color;

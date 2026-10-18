@@ -36,11 +36,21 @@ In the MR scene these buttons are unmapped.
 
 ## Turn-Based Mode (VR)
 
-Same tank controls as above, but only during your own turn:
+Each of your turns starts with a short **look-around** (10 s; the timer and fuel don't run yet, your tank is locked):
 
 | | |
 |---|---|
-| **A Button** (at the "pass the headset" banner) | Start your turn (hot-seat with 2+ players; the timer starts after this) |
+| **Left Stick** | Fly around the map (relative to where you look) |
+| **Right Stick X** | Snap-turn 30 deg |
+| **Right Stick Y** | Rise / sink (up to 4 m above the ground) |
+| **Grip** | Drag yourself, as usual |
+| **A Button** | End the look-around early |
+
+Then you're put back behind your tank and the turn itself starts, with the same tank controls as above:
+
+| | |
+|---|---|
+| **A Button** (at the "pass the headset" banner) | Hand-off: start your look-around (hot-seat with 2+ players) |
 | **Left Stick** | Drive, limited by the turn's fuel (turning is free) |
 | **Right Trigger** | One shot per turn; the arc in front of the barrel previews the first part of the flight (wind not included) |
 

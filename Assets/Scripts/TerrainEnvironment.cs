@@ -92,6 +92,9 @@ public class TerrainEnvironment : GameEnvironment
         ? _terrain.transform.position
         : transform.position - new Vector3(terrainSettings.size, 0f, terrainSettings.size) * 0.5f;
 
+    /// <summary>The map's footprint in world XZ.</summary>
+    public Rect MapArea => new Rect(TerrainOrigin.x, TerrainOrigin.z, terrainSettings.size, terrainSettings.size);
+
     private Vector3 TerrainCenter => TerrainOrigin + new Vector3(terrainSettings.size, 0f, terrainSettings.size) * 0.5f;
 
     public override Transform NavMeshSourceRoot => _terrain != null ? _terrain.transform : transform;
@@ -200,6 +203,7 @@ public class TerrainEnvironment : GameEnvironment
 
         if (rigFollow != null && humans.Count > 0)
         {
+            rigFollow.FreeLookArea = MapArea;
             rigFollow.SetTarget(humans[0], GetGroundHeight);
             rigFollow.SnapBehindTarget();
         }
