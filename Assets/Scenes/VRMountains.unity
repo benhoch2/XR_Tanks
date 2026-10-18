@@ -863,6 +863,114 @@ MonoBehaviour:
   behindDistance: 1.2
   heightSmoothTime: 0.35
   maxHeightOffset: 4
+--- !u!1 &781948373
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 781948376}
+  - component: {fileID: 781948375}
+  - component: {fileID: 781948374}
+  m_Layer: 0
+  m_Name: VR Environment
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &781948374
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 781948373}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 882a91111f0d5314a914035a536d3b8c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TerrainEnvironment
+  playerTankPrefab: {fileID: 3503318476722469206, guid: dc84a58afe1344547a230a5cb3c072c8,
+    type: 3}
+  enemyPrefab: {fileID: 7188619540205422496, guid: 7a186b8022c37eb4da6ec0a1e19b328e,
+    type: 3}
+  cratePrefab: {fileID: 2817913665691089265, guid: 32fdea892fe2e3347b513abdf70a28ed,
+    type: 3}
+  terrainMaterial: {fileID: 2100000, guid: 81998da09c4af38409f4df76bd157143, type: 2}
+  rigFollow: {fileID: 772128202}
+  turnBasedMatch: {fileID: 781948375}
+  terrainSettings:
+    size: 36
+    maxHeight: 5.5
+    heightmapResolution: 257
+    alphamapResolution: 256
+    rimWidth: 6
+    rimHeight: 3.6
+    ridgeHeight: 2.5
+    ridgeWavelength: 9
+    ridgeMaskWavelength: 14
+    ridgeThreshold: 0.5
+    valleyFlattening: 1.6
+    hillHeight: 0.35
+    hillWavelength: 5
+    startClearRadius: 4
+    startBlendWidth: 4
+  maxSpawnSlope: 15
+  minEnemyDistanceFromPlayer: 6
+  minEnemySpacing: 2
+  minHumanSpacing: 4
+  minCrateDistanceFromPlayer: 1.5
+  crateHeightRange: {x: 0.2, y: 0.6}
+  placementAttemptsPerActor: 40
+--- !u!114 &781948375
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 781948373}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 70b494b258cccdd46bad498ab75b6fea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurnBasedMatch
+  humanTurnSeconds: 30
+  humanFuel: 1.5
+  aiFuel: 0.8
+  aiMaxDriveSeconds: 3
+  maxResolveSeconds: 15
+  pauseBetweenTurns: 1
+  maxWind: 1
+  blastRadius: 0.4
+  craterRadius: 0.35
+  craterDepth: 0.12
+  blastKnockback: 0.4
+  rigFollow: {fileID: 772128202}
+  unlitMaterial: {fileID: 2100000, guid: dd0bd61b547c66240b83afc48455253c, type: 2}
+  aimPreviewSeconds: 0.45
+  viewShotDistance: 1.5
+  onlineSyncPrefab: {fileID: 6626906547000521429, guid: 90637d0c26d72194890f6799510603d6,
+    type: 3}
+  clientReadyTimeout: 20
+  gameOverSeconds: 4
+--- !u!4 &781948376
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 781948373}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -1139,110 +1247,6 @@ Transform:
   - {fileID: 408858451}
   m_Father: {fileID: 772128201}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1854095846
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1854095849}
-  - component: {fileID: 1854095848}
-  - component: {fileID: 1854095847}
-  m_Layer: 0
-  m_Name: VR Environment
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1854095847
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1854095846}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 882a91111f0d5314a914035a536d3b8c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TerrainEnvironment
-  playerTankPrefab: {fileID: 3503318476722469206, guid: dc84a58afe1344547a230a5cb3c072c8,
-    type: 3}
-  enemyPrefab: {fileID: 7188619540205422496, guid: 7a186b8022c37eb4da6ec0a1e19b328e,
-    type: 3}
-  cratePrefab: {fileID: 2817913665691089265, guid: 32fdea892fe2e3347b513abdf70a28ed,
-    type: 3}
-  terrainMaterial: {fileID: 2100000, guid: 81998da09c4af38409f4df76bd157143, type: 2}
-  rigFollow: {fileID: 772128202}
-  turnBasedMatch: {fileID: 1854095848}
-  terrainSettings:
-    size: 36
-    maxHeight: 5.5
-    heightmapResolution: 257
-    alphamapResolution: 256
-    rimWidth: 6
-    rimHeight: 3.6
-    ridgeHeight: 2.5
-    ridgeWavelength: 9
-    ridgeMaskWavelength: 14
-    ridgeThreshold: 0.5
-    valleyFlattening: 1.6
-    hillHeight: 0.35
-    hillWavelength: 5
-    startClearRadius: 4
-    startBlendWidth: 4
-  maxSpawnSlope: 15
-  minEnemyDistanceFromPlayer: 6
-  minEnemySpacing: 2
-  minHumanSpacing: 4
-  minCrateDistanceFromPlayer: 1.5
-  crateHeightRange: {x: 0.2, y: 0.6}
-  placementAttemptsPerActor: 40
---- !u!114 &1854095848
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1854095846}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 70b494b258cccdd46bad498ab75b6fea, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TurnBasedMatch
-  humanTurnSeconds: 30
-  humanFuel: 1.5
-  aiFuel: 0.8
-  aiMaxDriveSeconds: 3
-  maxResolveSeconds: 15
-  pauseBetweenTurns: 1
-  maxWind: 1
-  blastRadius: 0.4
-  craterRadius: 0.35
-  craterDepth: 0.12
-  blastKnockback: 0.4
-  rigFollow: {fileID: 772128202}
-  unlitMaterial: {fileID: 2100000, guid: dd0bd61b547c66240b83afc48455253c, type: 2}
-  aimPreviewSeconds: 0.45
-  viewShotDistance: 1.5
---- !u!4 &1854095849
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1854095846}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1894910495
 GameObject:
   m_ObjectHideFlags: 0
@@ -1447,4 +1451,4 @@ SceneRoots:
   - {fileID: 410087041}
   - {fileID: 832575519}
   - {fileID: 1894910497}
-  - {fileID: 1854095849}
+  - {fileID: 781948376}

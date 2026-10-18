@@ -75,15 +75,16 @@ public static class VRMountainSceneBuilder
 
     private static void Build()
     {
-        BuildMountainScene();
-        BuildMenuScene();
+        NetworkAssetBuilder.Result network = NetworkAssetBuilder.Build();
+        BuildMountainScene(network);
+        BuildMenuScene(network);
 
         SetBuildOrder(MenuScenePath, SourceScenePath, TargetScenePath);
         AssetDatabase.SaveAssets();
         EditorSceneManager.OpenScene(TargetScenePath, OpenSceneMode.Single);
     }
 
-    private static void BuildMountainScene()
+    private static void BuildMountainScene(NetworkAssetBuilder.Result network)
     {
         Scene scene = CreateVRSceneFromSource(TargetScenePath, out GameObject rig);
         Material terrain = CreateOrUpdateMaterial(TerrainMaterialPath, "Universal Render Pipeline/Terrain/Lit", null);
@@ -100,6 +101,7 @@ public static class VRMountainSceneBuilder
         var matchSo = new SerializedObject(match);
         SetReference(matchSo, "rigFollow", follow);
         SetReference(matchSo, "unlitMaterial", unlit);
+        SetReference(matchSo, "onlineSyncPrefab", network.matchSync);
         matchSo.ApplyModifiedPropertiesWithoutUndo();
 
         var environment = environmentObject.AddComponent<TerrainEnvironment>();
@@ -115,7 +117,7 @@ public static class VRMountainSceneBuilder
         SaveScene(scene, TargetScenePath);
     }
 
-    private static void BuildMenuScene()
+    private static void BuildMenuScene(NetworkAssetBuilder.Result network)
     {
         Scene scene = CreateVRSceneFromSource(MenuScenePath, out GameObject rig);
 
@@ -131,6 +133,7 @@ public static class VRMountainSceneBuilder
         var menu = rig.AddComponent<MainMenu>();
         var so = new SerializedObject(menu);
         SetReference(so, "unlitMaterial", unlit);
+        SetReference(so, "networkBootstrapPrefab", network.bootstrap);
         so.ApplyModifiedPropertiesWithoutUndo();
 
         GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Cylinder);

@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 392c8f0e3b9003641897403d7d6ec013, type: 3}
+  m_Name: XRTanksNetworkPrefabMap
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkPrefabMap
+  entries:
+  - offline: {fileID: 1720991040967052277, guid: bcbc50768d8331f42b5358c0cfd4ec18,
+      type: 3}
+    online: {fileID: 5523919067978958391, guid: 66dd3b011c88eac458e007c8808e18b5,
+      type: 3}
+  - offline: {fileID: 1720991040967052277, guid: f61d6c97f594dab42ab098765ff68aa4,
+      type: 3}
+    online: {fileID: 5270721132854402295, guid: 7bfeda448edac1d4dbb710b9e083cd05,
+      type: 3}
+  - offline: {fileID: 1720991040967052277, guid: cdec6b5e2d8dd28408f58872e272cf69,
+      type: 3}
+    online: {fileID: 198283855410238712, guid: 302951bbf0a203c4fa26f92b2c93a112, type: 3}
+  - offline: {fileID: 1720991040967052277, guid: fef8d5dede12a904098badb431b3842b,
+      type: 3}
+    online: {fileID: 5074852895795545308, guid: bd24cf4967719f34d81dc8038d021dd1,
+      type: 3}
+  - offline: {fileID: 3503318476722469206, guid: dc84a58afe1344547a230a5cb3c072c8,
+      type: 3}
+    online: {fileID: 7756841654412977441, guid: 23142cd8d5f8b9646909f9eea3b8ea63,
+      type: 3}
+  - offline: {fileID: 6762094764774126651, guid: 8951d3b1926b5894c9ffb031446b1408,
+      type: 3}
+    online: {fileID: 4385283311090319753, guid: c35d27069a76b1c458dfab113787f5f8,
+      type: 3}
+  - offline: {fileID: 755817354433800644, guid: e15b511240177d140948733c9ece21ec,
+      type: 3}
+    online: {fileID: 3674804711312767667, guid: 859543a0cae874748a5a5c26c242ac4c,
+      type: 3}
+  - offline: {fileID: 7382912189685554811, guid: 0e0a67a47cb3dda4a85899ce9951cd4f,
+      type: 3}
+    online: {fileID: 4490587631231547271, guid: 8941d6375545ced45927e8f05c25e589,
+      type: 3}
+  - offline: {fileID: 2817913665691089265, guid: 32fdea892fe2e3347b513abdf70a28ed,
+      type: 3}
+    online: {fileID: 8113820923796856802, guid: e4bb550a528cf4e47a8cbe042d16b97b,
+      type: 3}

@@ -303,7 +303,9 @@ public class GameConfigManager : MonoBehaviour
         if (navMeshBuild != null)
             yield return navMeshBuild;
 
-        _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
+        // Online, enemies on clients are puppets of the host's AI; only the host sets them up.
+        if (GameSession.HasAuthority)
+            _enemyConfigCoroutine = StartCoroutine(ConfigureEnemyTankMovementWhenReady());
 
         yield return environment.StartCoroutine(environment.SpawnActors());
     }
@@ -533,7 +535,8 @@ public class GameConfigManager : MonoBehaviour
 
     public void OnEnemyKilled()
     {
-        if (!_winConditionArmed)
+        // Online matches end through TurnBasedMatch, which also covers free-for-all games.
+        if (!_winConditionArmed || GameSession.IsOnline)
             return;
 
         _enemiesAlive--;
@@ -555,6 +558,14 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Game Config")]
     public void ReloadScene()
     {
+        if (GameSession.IsOnline)
+        {
+            // The host starts the next round for everyone; clients follow its scene load.
+            if (OnlineSession.IsHost)
+                OnlineSession.RestartMatch();
+            return;
+        }
+
         ResetSceneStartupState();
         Scene active = SceneManager.GetActiveScene();
         SceneManager.LoadScene(active.name);
@@ -564,6 +575,12 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Game Config")]
     public void SwitchMRVR()
     {
+        if (GameSession.IsOnline)
+        {
+            Debug.LogWarning("[GameConfig] Leave the online game (Back To Menu) before switching scenes.");
+            return;
+        }
+
         string target = SceneManager.GetActiveScene().name == GameSession.VirtualRealitySceneName
             ? GameSession.MixedRealitySceneName
             : GameSession.VirtualRealitySceneName;
@@ -587,6 +604,8 @@ public class GameConfigManager : MonoBehaviour
         }
 
         ResetSceneStartupState();
+        if (GameSession.IsOnline)
+            _ = OnlineSession.LeaveAsync(); // as host, this ends the match for everyone
         SceneManager.LoadScene(GameSession.MenuSceneName);
     }
 

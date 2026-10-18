@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -17,6 +19,12 @@ using UnityEngine.InputSystem;
 ///
 /// Spawned and started by <see cref="TerrainEnvironment"/>; victory reuses the regular win
 /// condition (GameConfigManager reloads the round), defeat reloads from here.
+///
+/// <b>Online</b> (<see cref="GameSession.IsOnline"/>): one tank per headset. The host runs the
+/// rules (turn order, timer, wind, AI turns, explosions, end of game) and publishes a
+/// <see cref="TurnState"/> through <see cref="OnlineMatchSync"/>; every headset, host included,
+/// presents from that state (camera, banners, HUD) and enables its own tank's controls on its
+/// turn. Shots reach the host through <see cref="NetworkTankControl"/>.
 /// </summary>
 public class TurnBasedMatch : MonoBehaviour
 {
@@ -52,6 +60,19 @@ public class TurnBasedMatch : MonoBehaviour
     [Tooltip("How far from a landing shot the camera jumps to watch it.")]
     [SerializeField] private float viewShotDistance = 1.5f;
 
+    [Header("Online")]
+    [Tooltip("Network prefab carrying OnlineMatchSync; the host spawns it when an online round starts.")]
+    [SerializeField] private GameObject onlineSyncPrefab;
+    [Tooltip("How long the host waits for every headset to finish building the map before the first turn.")]
+    [SerializeField] private float clientReadyTimeout = 20f;
+    [SerializeField] private float gameOverSeconds = 4f;
+
+    /// <summary>The scene's match (one per VR scene).</summary>
+    public static TurnBasedMatch Instance { get; private set; }
+
+    /// <summary>Online: the turn state as this headset last saw it (tests, diagnostics).</summary>
+    public TurnState OnlineState => _state;
+
     private static readonly Color[] HumanColors =
     {
         new Color(1f, 0.35f, 0.3f),
@@ -64,6 +85,8 @@ public class TurnBasedMatch : MonoBehaviour
 
     private class Participant
     {
+        public int index; // online: NetworkTarget.ParticipantIndex
+        public bool local; // online: this headset owns the tank
         public string name;
         public Color color;
         public bool human;
@@ -90,6 +113,14 @@ public class TurnBasedMatch : MonoBehaviour
     private bool _navMeshDirty;
     private bool _gameOver;
     private bool _resolving;
+    private bool _hooked;
+
+    // Online
+    private OnlineMatchSync _sync;
+    private TurnState _state;
+    private bool _shotAccepted;
+    private Participant _controlled;
+    private Coroutine _bannerTimeout;
 
     private TextMeshPro _hud;
     private TextMeshPro _banner;
@@ -101,6 +132,11 @@ public class TurnBasedMatch : MonoBehaviour
     public void Begin(TerrainEnvironment environment, List<Transform> humanTanks)
     {
         _environment = environment;
+        if (GameSession.IsOnline)
+        {
+            BeginOnline();
+            return;
+        }
 
         for (int i = 0; i < humanTanks.Count; i++)
         {
@@ -122,11 +158,21 @@ public class TurnBasedMatch : MonoBehaviour
 
         // Hooked here, not in OnEnable: the component also sits in the scene during
         // real-time play, which must keep its plain explosions and reload-on-death.
-        Projectile.Exploded += OnProjectileExploded;
-        Target.HumanTankDestroyed = OnHumanTankDestroyed;
-
+        HookRules();
         CreatePresentation();
         StartCoroutine(Run());
+    }
+
+    private void HookRules()
+    {
+        Projectile.Exploded += OnProjectileExploded;
+        Target.HumanTankDestroyed = OnHumanTankDestroyed;
+        _hooked = true;
+    }
+
+    private void Awake()
+    {
+        Instance = this;
     }
 
     private void OnEnable()
@@ -141,13 +187,19 @@ public class TurnBasedMatch : MonoBehaviour
         _readyAction?.Dispose();
         _readyAction = null;
         Projectile.Exploded -= OnProjectileExploded;
-        if (_humans.Count > 0)
+        if (_hooked)
             Target.HumanTankDestroyed = null;
+        _hooked = false;
         Projectile.Wind = Vector3.zero;
+        if (_sync != null)
+            _sync.State.OnValueChanged -= OnTurnStateChanged;
     }
 
     private void OnDestroy()
     {
+        if (Instance == this)
+            Instance = null;
+
         foreach (Object o in _runtimeObjects)
         {
             if (o != null)
@@ -311,20 +363,29 @@ public class TurnBasedMatch : MonoBehaviour
             bool landed = _lastShot == null || _lastShot.HasImpacted;
             if (!viewed && landed)
             {
-                ViewLanding(lastSeen, shooterPosition);
+                AnnounceLanding(lastSeen, shooterPosition);
                 viewed = true;
             }
             yield return null;
         }
 
         if (!viewed)
-            ViewLanding(lastSeen, shooterPosition);
+            AnnounceLanding(lastSeen, shooterPosition);
 
         // Let the explosion play out before the next turn moves the camera.
         yield return new WaitForSeconds(1.2f);
     }
 
-    private void ViewLanding(Vector3 point, Vector3 shooterPosition)
+    /// <summary>Shows everyone where a shot landed (online through the sync, offline directly).</summary>
+    private void AnnounceLanding(Vector3 point, Vector3 shooterPosition)
+    {
+        if (GameSession.IsOnline && _sync != null)
+            _sync.ShotLandedRpc(point, shooterPosition);
+        else
+            ViewLanding(point, shooterPosition);
+    }
+
+    public void ViewLanding(Vector3 point, Vector3 shooterPosition)
     {
         if (rigFollow == null || Camera.main == null)
             return;
@@ -341,6 +402,8 @@ public class TurnBasedMatch : MonoBehaviour
         {
             _environment.DigCrater(position, craterRadius, craterDepth);
             _navMeshDirty = true;
+            if (GameSession.IsOnline && _sync != null)
+                _sync.CraterRpc(position, craterRadius, craterDepth);
         }
 
         foreach (Target target in FindObjectsByType<Target>(FindObjectsSortMode.None))
@@ -489,6 +552,345 @@ public class TurnBasedMatch : MonoBehaviour
         return false;
     }
 
+    // ---------- Online ----------
+
+    private void BeginOnline()
+    {
+        CreatePresentation();
+        if (GameSession.HasAuthority)
+        {
+            HookRules();
+            if (onlineSyncPrefab == null)
+            {
+                Debug.LogError("[Online] TurnBasedMatch has no online sync prefab; rebuild the VR scenes.");
+                return;
+            }
+
+            // AttachSync is called back from the sync's OnNetworkSpawn.
+            Instantiate(onlineSyncPrefab).GetComponent<NetworkObject>().Spawn(destroyWithScene: true);
+            StartCoroutine(RunOnlineHost());
+        }
+        else
+        {
+            StartCoroutine(ReportReadyWhenBuilt());
+        }
+    }
+
+    /// <summary>Called by <see cref="OnlineMatchSync"/> when it spawns on this headset.</summary>
+    public void AttachSync(OnlineMatchSync sync)
+    {
+        // The sync can arrive before this headset finished building its world (and Begin).
+        CreatePresentation();
+        _sync = sync;
+        _sync.State.OnValueChanged += OnTurnStateChanged;
+        OnTurnStateChanged(default, _sync.State.Value);
+    }
+
+    private IEnumerator ReportReadyWhenBuilt()
+    {
+        while (_sync == null || _environment == null || !_environment.IsWorldReady)
+            yield return null;
+        _sync.ClientReadyRpc();
+    }
+
+    /// <summary>Host only: may <paramref name="tank"/> fire right now?</summary>
+    public bool CanFire(Transform tank)
+    {
+        return GameSession.IsOnline && !_gameOver && !_shotAccepted
+               && _active != null && _active.tank == tank && _state.Phase == TurnPhase.Playing;
+    }
+
+    /// <summary>Host only: a validated shot from the active tank has been spawned.</summary>
+    public void OnShotFired(Transform tank, Projectile projectile)
+    {
+        _shotAccepted = true;
+        _lastShot = projectile;
+    }
+
+    private delegate void StateEdit(ref TurnState state);
+
+    private void EditState(StateEdit edit)
+    {
+        TurnState state = _sync.State.Value;
+        edit(ref state);
+        _sync.State.Value = state; // also raises OnTurnStateChanged here on the host
+    }
+
+    private IEnumerator RunOnlineHost()
+    {
+        while (_sync == null)
+            yield return null;
+
+        EditState((ref TurnState st) => { st.Phase = TurnPhase.Waiting; st.ActiveIndex = -1; });
+
+        // Every headset builds the map itself; don't start until they have (or give up waiting).
+        float waitStart = Time.realtimeSinceStartup;
+        while (Time.realtimeSinceStartup - waitStart < clientReadyTimeout && !AllHeadsetsReady())
+            yield return null;
+        while (GameConfigManager.Instance == null || !GameConfigManager.Instance.EnemiesReady)
+            yield return null;
+
+        foreach (EnemyTankAI ai in FindObjectsByType<EnemyTankAI>(FindObjectsSortMode.None))
+            ai.TurnBasedControl = true;
+        RefreshOnlineParticipants();
+
+        int humanCursor = 0, aiCursor = 0;
+        while (!_gameOver)
+        {
+            if (CheckOnlineGameOver()) yield break;
+            yield return PlayOnlineTurn(NextAlive(_humans, ref humanCursor));
+
+            if (_ais.Count == 0)
+                continue; // free-for-all: humans only
+            if (CheckOnlineGameOver()) yield break;
+            yield return PlayOnlineTurn(NextAlive(_ais, ref aiCursor));
+        }
+    }
+
+    private bool AllHeadsetsReady()
+    {
+        NetworkManager manager = NetworkManager.Singleton;
+        foreach (ulong id in GameSession.OnlineRoster)
+        {
+            bool connected = manager != null && manager.ConnectedClientsIds.Contains(id);
+            if (connected && !_sync.ReadyClients.Contains(id))
+                return false;
+        }
+        return true;
+    }
+
+    private IEnumerator PlayOnlineTurn(Participant p)
+    {
+        if (p == null)
+            yield break;
+
+        RollWind();
+        _lastShot = null;
+        _shotAccepted = false;
+        _active = p;
+        int participantCount = _humans.Count + _ais.Count;
+        EditState((ref TurnState st) =>
+        {
+            st.Turn++;
+            st.ActiveIndex = p.index;
+            st.Phase = TurnPhase.Starting;
+            st.SecondsLeft = Mathf.CeilToInt(humanTurnSeconds);
+            st.Wind = Projectile.Wind;
+            st.ParticipantCount = participantCount;
+        });
+        yield return new WaitForSeconds(1.2f);
+
+        EditState((ref TurnState st) => st.Phase = TurnPhase.Playing);
+        if (p.human)
+        {
+            float timeLeft = humanTurnSeconds;
+            while (p.Alive && !_shotAccepted && timeLeft > 0f)
+            {
+                timeLeft -= Time.deltaTime;
+                int seconds = Mathf.CeilToInt(Mathf.Max(0f, timeLeft));
+                if (seconds != _state.SecondsLeft)
+                    EditState((ref TurnState st) => st.SecondsLeft = seconds);
+                yield return null;
+            }
+        }
+        else if (p.ai != null)
+        {
+            yield return p.ai.TakeTurn(NearestHumanTank(p.tank.position), aiFuel, aiMaxDriveSeconds);
+            if (p.tank != null)
+            {
+                foreach (Projectile projectile in FindObjectsByType<Projectile>(FindObjectsSortMode.None))
+                {
+                    if (projectile.shooter == p.tank)
+                        _lastShot = projectile;
+                }
+            }
+        }
+
+        EditState((ref TurnState st) => st.Phase = TurnPhase.Resolving);
+        yield return ResolveShots(p);
+
+        if (_navMeshDirty && GameConfigManager.Instance != null)
+        {
+            _navMeshDirty = false;
+            AsyncOperation refresh = GameConfigManager.Instance.RefreshRuntimeNavMesh();
+            if (refresh != null)
+                yield return refresh;
+        }
+
+        yield return new WaitForSeconds(pauseBetweenTurns);
+    }
+
+    private bool CheckOnlineGameOver()
+    {
+        if (_gameOver)
+            return true;
+
+        string message = null;
+        if (_ais.Count > 0)
+        {
+            if (!AnyAlive(_ais))
+                message = "Victory!\n<size=60%>The players win</size>";
+            else if (!AnyAlive(_humans))
+                message = "Defeat\n<size=60%>The AI tanks win</size>";
+        }
+        else
+        {
+            // Free-for-all: last tank standing.
+            Participant survivor = null;
+            int alive = 0;
+            foreach (Participant p in _humans)
+            {
+                if (!p.Alive) continue;
+                alive++;
+                survivor = p;
+            }
+            if (alive == 0)
+                message = "Draw";
+            else if (alive == 1 && _humans.Count > 1)
+                message = $"{survivor.name} wins!";
+        }
+
+        if (message == null)
+            return false;
+
+        _gameOver = true;
+        EditState((ref TurnState st) =>
+        {
+            st.Phase = TurnPhase.GameOver;
+            st.ActiveIndex = -1;
+            st.Message = message;
+        });
+        StartCoroutine(RestartAfterGameOver());
+        return true;
+    }
+
+    private IEnumerator RestartAfterGameOver()
+    {
+        yield return new WaitForSecondsRealtime(gameOverSeconds);
+        if (GameConfigManager.Instance != null)
+            GameConfigManager.Instance.ReloadScene(); // online host: next round for everyone
+    }
+
+    /// <summary>
+    /// Builds the participant lists from the network-spawned tanks (every headset has them;
+    /// the host assigned each its turn-order index before spawning).
+    /// </summary>
+    private void RefreshOnlineParticipants()
+    {
+        foreach (NetworkTarget networkTarget in FindObjectsByType<NetworkTarget>(FindObjectsSortMode.None))
+        {
+            int index = networkTarget.ParticipantIndex.Value;
+            if (index < 0 || FindParticipant(index) != null)
+                continue;
+
+            Transform tank = networkTarget.transform;
+            bool human = tank.TryGetComponent(out ShootingControls gun);
+            var p = new Participant
+            {
+                index = index,
+                human = human,
+                local = human && networkTarget.IsOwner,
+                tank = tank,
+                target = tank.GetComponent<Target>(),
+                ai = tank.GetComponent<EnemyTankAI>(),
+                drive = tank.GetComponent<TowerController>(),
+                gun = gun,
+                flip = tank.GetComponent<TankFlip>(),
+            };
+
+            if (human)
+            {
+                p.name = p.local ? "You" : $"Player {index + 1}";
+                p.color = HumanColors[index % HumanColors.Length];
+                _humans.Add(p);
+            }
+            else
+            {
+                p.name = $"AI {index - GameSession.OnlineRoster.Count + 1}";
+                p.color = AiColor;
+                _ais.Add(p);
+            }
+            p.nameTag = CreateText(p.name, p.color, human ? 0.025f : 0.02f);
+
+            // First sight of our own tank: put the camera behind it.
+            if (p.local && rigFollow != null && _state.ActiveIndex < 0)
+            {
+                rigFollow.SetTarget(p.tank);
+                rigFollow.SnapBehindTarget();
+            }
+        }
+
+        _humans.Sort((a, b) => a.index.CompareTo(b.index));
+        _ais.Sort((a, b) => a.index.CompareTo(b.index));
+    }
+
+    private Participant FindParticipant(int index)
+    {
+        foreach (Participant p in _humans) if (p.index == index) return p;
+        foreach (Participant p in _ais) if (p.index == index) return p;
+        return null;
+    }
+
+    /// <summary>Every headset (host included): present the host's turn state.</summary>
+    private void OnTurnStateChanged(TurnState previous, TurnState current)
+    {
+        _state = current;
+        if (!GameSession.HasAuthority)
+            Projectile.Wind = current.Wind; // display only; physics runs on the host
+
+        RefreshOnlineParticipants();
+        Participant active = FindParticipant(current.ActiveIndex);
+
+        if (current.Turn != previous.Turn && active != null)
+        {
+            _active = active;
+            if (rigFollow != null && active.tank != null)
+            {
+                rigFollow.SetTarget(active.tank);
+                rigFollow.SnapBehindTarget(active.human ? -1f : 2f);
+            }
+            ShowBanner(active.local ? "Your turn" : $"{active.name}'s turn", active.color);
+            if (_bannerTimeout != null)
+                StopCoroutine(_bannerTimeout);
+            _bannerTimeout = StartCoroutine(HideBannerAfter(1.2f));
+        }
+
+        // Our own tank's controls are live exactly while the host says it's our turn.
+        bool ourTurn = current.Phase == TurnPhase.Playing && active != null && active.local && active.Alive;
+        if (ourTurn && _controlled == null)
+        {
+            _controlled = active;
+            SetHumanControl(active, true);
+            active.drive.DriveBudget = humanFuel;
+            active.gun.ShotsRemaining = 1;
+        }
+        else if (!ourTurn && _controlled != null)
+        {
+            SetHumanControl(_controlled, false);
+            _controlled = null;
+            _aimPreview.enabled = false;
+        }
+
+        if (current.Phase == TurnPhase.Resolving && previous.Phase != TurnPhase.Resolving && rigFollow != null)
+            rigFollow.SetTarget(null);
+        _resolving = current.Phase == TurnPhase.Resolving;
+
+        if (current.Phase == TurnPhase.GameOver && previous.Phase != TurnPhase.GameOver)
+        {
+            _gameOver = true;
+            _active = null;
+            ShowBanner(current.Message.ToString(), HumanColors[2]);
+        }
+    }
+
+    private IEnumerator HideBannerAfter(float seconds)
+    {
+        yield return new WaitForSeconds(seconds);
+        if (!_gameOver)
+            HideBanner();
+        _bannerTimeout = null;
+    }
+
     // ---------- Presentation ----------
 
     private void LateUpdate()
@@ -510,15 +912,24 @@ public class TurnBasedMatch : MonoBehaviour
         _hud.transform.position = anchor;
         Billboard(_hud.transform, cam);
 
+        int seconds = GameSession.IsOnline ? _state.SecondsLeft : Mathf.CeilToInt(Mathf.Max(0f, _timeLeft));
+        bool showFuel = _active.drive != null && (!GameSession.IsOnline || _active.local);
         string status = _resolving
             ? "shot fired"
-            : _active.human
-                ? $"{Mathf.CeilToInt(Mathf.Max(0f, _timeLeft))}s   Fuel {Mathf.RoundToInt(100f * Mathf.Clamp01(_active.drive.DriveBudget / humanFuel))}%"
-                : "aiming...";
+            : !_active.human
+                ? "aiming..."
+                : showFuel
+                    ? $"{seconds}s   Fuel {Mathf.RoundToInt(100f * Mathf.Clamp01(_active.drive.DriveBudget / humanFuel))}%"
+                    : $"{seconds}s";
+        if (GameSession.IsOnline && _state.Phase == TurnPhase.Starting)
+            status = "get ready";
         _hud.text = $"<color=#{ColorUtility.ToHtmlStringRGB(_active.color)}>{_active.name}</color>\n<size=70%>{status}\nWind {Projectile.Wind.magnitude:F1}</size>";
         _hud.color = Color.white;
 
         DrawWindArrow(anchor + Vector3.down * 0.1f);
+
+        if (GameSession.IsOnline && _controlled != null)
+            UpdateAimPreview(_controlled);
     }
 
     private void PlaceTag(Participant p, Camera cam)
@@ -606,6 +1017,9 @@ public class TurnBasedMatch : MonoBehaviour
 
     private void CreatePresentation()
     {
+        if (_hud != null)
+            return;
+
         _hud = CreateText("", Color.white, 0.03f);
         _banner = CreateText("", Color.white, 0.07f);
         _banner.gameObject.SetActive(false);

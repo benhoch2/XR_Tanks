@@ -572,8 +572,10 @@ public class EnemyTankAI : MonoBehaviour
         SolveBallistic(firePos, virtualTarget, launchSpeed, out Vector3 launchVelocity);
         launchVelocity = EnforceMinElevation(launchVelocity);
 
+        // Online (host only — AI never runs on clients) the shot is a network projectile.
+        GameObject prefab = GameSession.IsOnline ? NetworkPrefabMap.Resolve(enemyProjectilePrefab) : enemyProjectilePrefab;
         GameObject projObj = Instantiate(
-            enemyProjectilePrefab,
+            prefab,
             firePos,
             Quaternion.LookRotation(launchVelocity.sqrMagnitude > 0.0001f ? launchVelocity.normalized : transform.forward, Vector3.up));
 
@@ -601,6 +603,9 @@ public class EnemyTankAI : MonoBehaviour
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.linearVelocity = launchVelocity;
         }
+
+        if (GameSession.IsOnline && projObj.TryGetComponent(out Unity.Netcode.NetworkObject networkObject))
+            networkObject.Spawn(destroyWithScene: true);
 
         _lastAimTarget = virtualTarget;
         _awaitingImpact = true;

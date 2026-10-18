@@ -43,6 +43,10 @@ public class ShootingControls : MonoBehaviour
 
     public bool IsCharging => isCharging;
     public Transform FirePoint => firePoint;
+    public int ProjectileDamage => projectileDamage;
+
+    public GameObject GetProjectilePrefab(int index) =>
+        projectilePrefabs != null && index >= 0 && index < projectilePrefabs.Length ? projectilePrefabs[index] : null;
 
     /// <summary>Launch speed the shot would leave with if released now (the minimum while not charging).</summary>
     public float CurrentLaunchSpeed =>
@@ -149,6 +153,16 @@ public class ShootingControls : MonoBehaviour
         {
             // Crisper "thunk" pulse on fire. Stronger than the charge ping.
             Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.5f, 0.8f, 0.1f);
+
+            // Online: the host spawns and simulates the shot (see NetworkTankControl).
+            if (TryGetComponent(out NetworkTankControl network) && network.IsSpawned)
+            {
+                network.RequestFire(currentProjectileIndex, firePoint.position, firePoint.rotation, firePoint.forward * velocity);
+                if (ShotsRemaining > 0)
+                    ShotsRemaining--;
+                ShotFired?.Invoke(null);
+                return;
+            }
 
             GameObject projectile = Instantiate(prefab, firePoint.position, firePoint.rotation);
 

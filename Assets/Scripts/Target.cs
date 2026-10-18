@@ -39,6 +39,11 @@ public class Target : MonoBehaviour
     /// </summary>
     public static System.Action<Target> HumanTankDestroyed;
 
+    /// <summary>Raised the moment this target is destroyed (before the object goes away).</summary>
+    public event System.Action<Target> Died;
+
+    public int CurrentHitPoints => currentHitPoints;
+
     private void Awake()
     {
         currentHitPoints = maxHitPoints;
@@ -47,6 +52,10 @@ public class Target : MonoBehaviour
 
     private void HandleHit(GameObject hitObject, Vector3 hitPoint)
     {
+        // Online, only the host decides hits; everyone else mirrors it through NetworkTarget.
+        if (!GameSession.HasAuthority)
+            return;
+
         Projectile proj = hitObject.GetComponent<Projectile>();
         if (proj != null)
         {
@@ -92,7 +101,9 @@ public class Target : MonoBehaviour
         if (maxHitPoints <= 0 || damage == int.MaxValue)
         {
             currentHitPoints = 0;
+            UpdateHealthBar();
             SpawnEffect(effectDuration);
+            Died?.Invoke(this);
             if (maxHitPoints <= 0)
                 Destroy(gameObject);
             else
@@ -107,6 +118,7 @@ public class Target : MonoBehaviour
         if (currentHitPoints <= 0)
         {
             SpawnEffect(effectDuration);
+            Died?.Invoke(this);
             HandleLethalHit();
         }
         else
@@ -114,6 +126,21 @@ public class Target : MonoBehaviour
             // Non-lethal hit: spawn effect at collision point
             OnNonLethalHit(hitPoint);
         }
+    }
+
+    /// <summary>Online clients: the host's hit points for this target (see NetworkTarget).</summary>
+    public void ApplyNetworkHitPoints(int hitPoints, bool playEffect)
+    {
+        currentHitPoints = hitPoints;
+        UpdateHealthBar();
+        if (playEffect)
+            OnNonLethalHit(transform.position);
+    }
+
+    /// <summary>Online clients: the death effect the host played when this target was destroyed.</summary>
+    public void PlayDeathEffect()
+    {
+        SpawnEffect(effectDuration);
     }
 
     private void HandleLethalHit()
@@ -153,8 +180,12 @@ public class Target : MonoBehaviour
     private IEnumerator HandleHotSeatDeath()
     {
         DisablePlayerInput();
-        Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.7f, 0.9f, 0.5f);
-        Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.7f, 0.9f, 0.5f);
+        // Online this runs on the host; only buzz if the dying tank is the host's own.
+        if (NetworkTankControl.IsLocallyControlled(gameObject))
+        {
+            Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.7f, 0.9f, 0.5f);
+            Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.7f, 0.9f, 0.5f);
+        }
         HumanTankDestroyed?.Invoke(this);
 
         // Leave the wreck long enough for the death effect to read, then clear it.
@@ -206,6 +237,8 @@ public class Target : MonoBehaviour
         ShootingControls shooterControls = proj.shooter.GetComponent<ShootingControls>();
         if (shooterControls == null)
             return; // shooter isn't the player
+        if (!NetworkTankControl.IsLocallyControlled(proj.shooter.gameObject))
+            return; // online: another headset's shot, judged here on the host
 
         Haptics.Pulse(shooterControls, OVRInput.Controller.RTouch, 0.6f, 0.7f, 0.07f);
     }

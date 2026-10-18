@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Rendering;
@@ -79,6 +80,12 @@ public class TerrainEnvironment : GameEnvironment
     }
 
     public int Seed => _seed;
+
+    /// <summary>True once the terrain exists (online, network-spawned tanks wait for it).</summary>
+    public bool IsWorldReady { get; private set; }
+
+    /// <summary>Craters dug this round (tests compare it across headsets).</summary>
+    public int CraterCount { get; private set; }
     public MountainTerrainGenerator.Settings TerrainSettings => terrainSettings;
 
     private Vector3 TerrainOrigin => _terrain != null
@@ -102,13 +109,32 @@ public class TerrainEnvironment : GameEnvironment
     public override void ApplySpawnCounts(int enemies, int crates)
     {
         // Turn-based rounds take their line-up from the main menu instead of the config menu.
-        _humanCount = GameSession.IsTurnBased ? Mathf.Clamp(GameSession.HumanPlayers, 1, GameSession.MaxHumanPlayers) : 1;
-        _enemyCount = GameSession.IsTurnBased ? Mathf.Clamp(GameSession.AiTanks, 1, GameSession.MaxAiTanks) : enemies;
+        if (GameSession.IsOnline)
+        {
+            // One tank per headset; 0 AI tanks is a free-for-all.
+            _humanCount = Mathf.Max(1, GameSession.OnlineRoster.Count);
+            _enemyCount = Mathf.Clamp(GameSession.AiTanks, 0, GameSession.MaxAiTanks);
+        }
+        else
+        {
+            _humanCount = GameSession.IsTurnBased ? Mathf.Clamp(GameSession.HumanPlayers, 1, GameSession.MaxHumanPlayers) : 1;
+            _enemyCount = GameSession.IsTurnBased ? Mathf.Clamp(GameSession.AiTanks, 1, GameSession.MaxAiTanks) : enemies;
+        }
         _crateCount = crates;
     }
 
     public override IEnumerator PrepareWorld()
     {
+        if (GameSession.IsOnline)
+        {
+            // Every headset builds the same map from the host's seed (sent with the match setup).
+            float waitStart = Time.realtimeSinceStartup;
+            while (GameSession.OnlineSeed < 0 && Time.realtimeSinceStartup - waitStart < 10f)
+                yield return null;
+            if (GameSession.OnlineSeed < 0)
+                Debug.LogError("[Terrain] No seed from the host; maps will differ between headsets.");
+        }
+
         _seed = ChooseSeed();
         Debug.Log($"[Terrain] Generating mountain map with seed {_seed}.");
 
@@ -118,6 +144,7 @@ public class TerrainEnvironment : GameEnvironment
         CreateTerrain();
         yield return null;
         PaintTerrain();
+        IsWorldReady = true;
     }
 
     /// <summary>PrepareWorld without the frame spreading or seed choice, for editor tooling.</summary>
@@ -127,10 +154,17 @@ public class TerrainEnvironment : GameEnvironment
         _heights = MountainTerrainGenerator.GenerateHeights(_seed, terrainSettings);
         CreateTerrain();
         PaintTerrain();
+        IsWorldReady = true;
     }
 
     public override IEnumerator SpawnActors()
     {
+        if (GameSession.IsOnline)
+        {
+            SpawnOnline();
+            yield break;
+        }
+
         SpawnPlan plan = PlanSpawns();
         var rng = new System.Random(_seed ^ 0x5EED);
 
@@ -140,9 +174,12 @@ public class TerrainEnvironment : GameEnvironment
         var humans = new List<Transform>();
         for (int i = 0; i < plan.players.Count; i++)
         {
-            Transform tank = SpawnPlayer(plan, i, actorsRoot);
+            Transform tank = SpawnPlayer(plan, i, playerTankPrefab, actorsRoot);
             if (tank != null)
+            {
                 humans.Add(tank);
+                RegisterLocalHumanTank(tank);
+            }
         }
 
         if (enemyPrefab != null)
@@ -172,6 +209,65 @@ public class TerrainEnvironment : GameEnvironment
             turnBasedMatch.Begin(this, humans);
 
         yield break;
+    }
+
+    /// <summary>
+    /// Online: the host network-spawns one tank per headset (owned by that headset), the AI
+    /// tanks and the crates; clients get them through Netcode. Both then start the match.
+    /// </summary>
+    private void SpawnOnline()
+    {
+        var humans = new List<Transform>();
+
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+        {
+            SpawnPlan plan = PlanSpawns();
+            var rng = new System.Random(_seed ^ 0x5EED);
+
+            // Network objects can only be parented under other network objects, so they spawn at the root.
+            GameObject playerPrefab = NetworkPrefabMap.Resolve(playerTankPrefab);
+            for (int i = 0; i < plan.players.Count && i < GameSession.OnlineRoster.Count; i++)
+            {
+                Transform tank = SpawnPlayer(plan, i, playerPrefab, null);
+                if (tank == null)
+                    continue;
+
+                tank.GetComponent<NetworkTarget>().ParticipantIndex.Value = i;
+                tank.GetComponent<NetworkObject>().SpawnWithOwnership(GameSession.OnlineRoster[i], destroyWithScene: true);
+                humans.Add(tank);
+            }
+
+            var picker = enemyPrefab != null ? enemyPrefab.GetComponent<RandomEnemyVariant>() : null;
+            for (int n = 0; n < plan.enemies.Count; n++)
+            {
+                GameObject variant = picker != null ? picker.PickVariant(() => (float)rng.NextDouble()) : null;
+                if (variant == null)
+                    continue;
+
+                GameObject enemy = Instantiate(NetworkPrefabMap.Resolve(variant), plan.enemies[n], RandomYaw(rng));
+                enemy.GetComponent<NetworkTarget>().ParticipantIndex.Value = plan.players.Count + n;
+                enemy.GetComponent<NetworkObject>().Spawn(destroyWithScene: true);
+            }
+
+            if (cratePrefab != null)
+            {
+                GameObject crateNetworkPrefab = NetworkPrefabMap.Resolve(cratePrefab);
+                foreach (Vector3 point in plan.crates)
+                    Instantiate(crateNetworkPrefab, point, RandomYaw(rng)).GetComponent<NetworkObject>().Spawn(destroyWithScene: true);
+            }
+        }
+
+        // The match moves the camera to this headset's tank once it arrives.
+        if (rigFollow != null)
+            rigFollow.SetTarget(null, GetGroundHeight);
+        if (turnBasedMatch != null)
+            turnBasedMatch.Begin(this, humans);
+    }
+
+    /// <summary>Puts a tank this headset controls under the out-of-bounds guard.</summary>
+    public void RegisterLocalHumanTank(Transform tank)
+    {
+        _humanTanks.Add(new SpawnedTank { tank = tank, position = tank.position, rotation = tank.rotation });
     }
 
     /// <summary>
@@ -334,6 +430,7 @@ public class TerrainEnvironment : GameEnvironment
 
         _terrainData.SetHeights(x0, z0, heights);
         PaintCrater(local, radius * 1.15f);
+        CraterCount++;
     }
 
     private void PaintCrater(Vector3 local, float radius)
@@ -396,6 +493,9 @@ public class TerrainEnvironment : GameEnvironment
 
     private static int ChooseSeed()
     {
+        if (GameSession.IsOnline && GameSession.OnlineSeed >= 0)
+            return GameSession.OnlineSeed;
+
         GameConfigManager config = GameConfigManager.Instance;
         if (config == null)
             return 1;
@@ -573,9 +673,9 @@ public class TerrainEnvironment : GameEnvironment
         return bestSlope < float.MaxValue;
     }
 
-    private Transform SpawnPlayer(SpawnPlan plan, int index, Transform parent)
+    private Transform SpawnPlayer(SpawnPlan plan, int index, GameObject prefab, Transform parent)
     {
-        if (playerTankPrefab == null)
+        if (prefab == null)
         {
             Debug.LogWarning("[Terrain] No player tank prefab assigned.");
             return null;
@@ -595,12 +695,10 @@ public class TerrainEnvironment : GameEnvironment
             }
         }
 
-        GameObject tank = Instantiate(playerTankPrefab, position, Quaternion.identity, parent);
+        GameObject tank = Instantiate(prefab, position, Quaternion.identity, parent);
         tank.name = $"Player {index + 1} Tank";
         FaceHorizontally(tank.transform, facing);
         SnapBottomToHeight(tank, GetGroundHeight(position));
-
-        _humanTanks.Add(new SpawnedTank { tank = tank.transform, position = tank.transform.position, rotation = tank.transform.rotation });
         return tank.transform;
     }
 

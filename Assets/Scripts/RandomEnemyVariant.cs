@@ -27,14 +27,18 @@ public class RandomEnemyVariant : MonoBehaviour
 
     private void Start()
     {
-        GameObject choice = PickByWeight();
+        GameObject choice = PickVariant(() => Random.value);
         if (choice != null)
             Instantiate(choice, transform.position, transform.rotation, transform.parent);
 
         Destroy(gameObject);
     }
 
-    private GameObject PickByWeight()
+    /// <summary>
+    /// Picks a variant by weight using <paramref name="random01"/> (a value in [0, 1)). Online the
+    /// host calls this directly with its seeded generator and spawns the network variant itself.
+    /// </summary>
+    public GameObject PickVariant(System.Func<float> random01)
     {
         if (variants == null || variants.Length == 0)
         {
@@ -57,7 +61,7 @@ public class RandomEnemyVariant : MonoBehaviour
             return null;
         }
 
-        float roll = Random.value * total;
+        float roll = random01() * total;
         float acc = 0f;
         for (int i = 0; i < variants.Length; i++)
         {

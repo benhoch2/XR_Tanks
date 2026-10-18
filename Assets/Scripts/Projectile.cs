@@ -196,10 +196,20 @@ public class Projectile : MonoBehaviour
         {
             Vector3 destination = transform.position;
             destination.y += 0.05f;
-            shooter.position = destination;
+            // Online, a human tank's transform belongs to its owner's headset.
+            if (shooter.TryGetComponent(out NetworkTankControl network) && network.IsSpawned && !network.IsOwner)
+                network.Teleport(destination);
+            else
+                shooter.position = destination;
         }
         SpawnExplosionEffect(transform.position);
         Destroy(gameObject);
+    }
+
+    /// <summary>Online clients: the explosion the host showed for this projectile.</summary>
+    public void PlayExplosionEffect(Vector3 position)
+    {
+        SpawnExplosionEffect(position);
     }
 
     private void Explode()
