@@ -27,6 +27,25 @@
 
 In the MR scene these buttons are unmapped.
 
+## Main Menu
+
+| Button | Action |
+|---|---|
+| **Point + Trigger** (either hand) | Choose a game: MR real-time, VR real-time, VR turn-based; `-` / `+` set turn-based players (1-4) and AI tanks (1-6) |
+| **Y Button** → Game Config → *Back To Menu* | Return to the menu from any game |
+
+## Turn-Based Mode (VR)
+
+Same tank controls as above, but only during your own turn:
+
+| | |
+|---|---|
+| **A Button** (at the "pass the headset" banner) | Start your turn (hot-seat with 2+ players; the timer starts after this) |
+| **Left Stick** | Drive, limited by the turn's fuel (turning is free) |
+| **Right Trigger** | One shot per turn; the arc in front of the barrel previews the first part of the flight (wind not included) |
+
+Wind changes every turn and is shown as an arrow under the turn display above the active tank.
+
 ## Unmapped Buttons
 
 | Button | Hand |

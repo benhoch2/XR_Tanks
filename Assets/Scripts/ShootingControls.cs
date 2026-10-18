@@ -35,6 +35,19 @@ public class ShootingControls : MonoBehaviour
 
     private bool lastTriggerPressed = false;
 
+    /// <summary>Shots left before firing is blocked. -1 = unlimited (real-time play); the turn-based match sets 1 per turn.</summary>
+    public int ShotsRemaining { get; set; } = -1;
+
+    /// <summary>Raised with the projectile right after it is launched.</summary>
+    public event System.Action<Projectile> ShotFired;
+
+    public bool IsCharging => isCharging;
+    public Transform FirePoint => firePoint;
+
+    /// <summary>Launch speed the shot would leave with if released now (the minimum while not charging).</summary>
+    public float CurrentLaunchSpeed =>
+        Mathf.Lerp(minProjectileVelocity, maxProjectileVelocity, isCharging && powerBar != null ? Mathf.Clamp01(powerBar.power) : 0f);
+
     private GameObject CurrentPrefab =>
         (projectilePrefabs != null && projectilePrefabs.Length > 0)
             ? projectilePrefabs[currentProjectileIndex]
@@ -59,6 +72,12 @@ public class ShootingControls : MonoBehaviour
         cycleProjectileAction = new InputAction("CycleProjectile", InputActionType.Button, "<XRController>{RightHand}/primaryButton");
         fireAction.Enable();
         cycleProjectileAction.Enable();
+
+        // Drop any charge left over from before the last disable (turn-based hands control
+        // back and forth): a stale "was pressed" would otherwise fire on the first frame.
+        isCharging = false;
+        lastTriggerPressed = false;
+        if (powerBar != null) powerBar.power = 0f;
     }
 
     void OnDisable()
@@ -86,7 +105,7 @@ public class ShootingControls : MonoBehaviour
             CycleProjectile();
 
         // Start charging
-        if (triggerPressed)
+        if (triggerPressed && ShotsRemaining != 0)
         {
             chargeStartTime = Time.time;
             isCharging = true;
@@ -154,6 +173,10 @@ public class ShootingControls : MonoBehaviour
                 rb.interpolation = RigidbodyInterpolation.Interpolate;
                 rb.linearVelocity = firePoint.forward * velocity;
             }
+
+            if (ShotsRemaining > 0)
+                ShotsRemaining--;
+            ShotFired?.Invoke(proj);
         }
     }
 

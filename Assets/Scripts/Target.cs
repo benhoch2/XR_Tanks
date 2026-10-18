@@ -30,6 +30,15 @@ public class Target : MonoBehaviour
     // Reused across all Target instances on the main thread to avoid per-hit allocations.
     private static readonly List<ParticleSystem> _hitParticleBuffer = new List<ParticleSystem>(8);
 
+    /// <summary>Crates (no hit points) count as alive until destroyed.</summary>
+    public bool IsAlive => maxHitPoints <= 0 || currentHitPoints > 0;
+
+    /// <summary>
+    /// Turn-based only: called instead of the reload-on-death when a human tank is
+    /// destroyed, so one hot-seat player dying doesn't end the match for everyone.
+    /// </summary>
+    public static System.Action<Target> HumanTankDestroyed;
+
     private void Awake()
     {
         currentHitPoints = maxHitPoints;
@@ -55,38 +64,55 @@ public class Target : MonoBehaviour
             SpawnHitExplosion(hitPoint);
             TryFirePlayerHitConfirmedHaptic(proj);
 
-            // Player-invulnerability test toggle: show feedback but skip damage entirely.
-            // Detection: ShootingControls only lives on the player tank.
-            if (GameConfigManager.Instance != null
-                && GameConfigManager.Instance.playerInvulnerable
-                && GetComponent<ShootingControls>() != null)
-            {
-                OnNonLethalHit(hitPoint);
-                return;
-            }
+            // 0 damage = instant kill (TakeDamage treats damage <= 0 as a no-op).
+            TakeDamage(damage > 0 ? damage : int.MaxValue, hitPoint);
+        }
+    }
 
-            // Instant kill path (crates or projectile with 0 damage)
-            if (maxHitPoints <= 0 || damage <= 0)
-            {
-                SpawnEffect(effectDuration);
+    /// <summary>
+    /// Applies damage from a direct hit or a blast. Crates (no hit points) die from any
+    /// damage; tanks lose hit points and die at zero.
+    /// </summary>
+    public void TakeDamage(int damage, Vector3 hitPoint)
+    {
+        if (damage <= 0 || !IsAlive)
+            return;
+
+        // Player-invulnerability test toggle: show feedback but skip damage entirely.
+        // Detection: ShootingControls only lives on the player tank.
+        if (GameConfigManager.Instance != null
+            && GameConfigManager.Instance.playerInvulnerable
+            && GetComponent<ShootingControls>() != null)
+        {
+            OnNonLethalHit(hitPoint);
+            return;
+        }
+
+        // Instant kill path (crates or projectile with 0 damage)
+        if (maxHitPoints <= 0 || damage == int.MaxValue)
+        {
+            currentHitPoints = 0;
+            SpawnEffect(effectDuration);
+            if (maxHitPoints <= 0)
                 Destroy(gameObject);
-                return;
-            }
-
-            // Health-based path (enemies and the player tank).
-            currentHitPoints -= damage;
-            UpdateHealthBar();
-
-            if (currentHitPoints <= 0)
-            {
-                SpawnEffect(effectDuration);
-                HandleLethalHit();
-            }
             else
-            {
-                // Non-lethal hit: spawn effect at collision point
-                OnNonLethalHit(hitPoint);
-            }
+                HandleLethalHit();
+            return;
+        }
+
+        // Health-based path (enemies and the player tank).
+        currentHitPoints -= damage;
+        UpdateHealthBar();
+
+        if (currentHitPoints <= 0)
+        {
+            SpawnEffect(effectDuration);
+            HandleLethalHit();
+        }
+        else
+        {
+            // Non-lethal hit: spawn effect at collision point
+            OnNonLethalHit(hitPoint);
         }
     }
 
@@ -95,7 +121,10 @@ public class Target : MonoBehaviour
         // The player tank carries ShootingControls; enemies don't.
         if (GetComponent<ShootingControls>() != null)
         {
-            StartCoroutine(HandlePlayerDeath());
+            if (HumanTankDestroyed != null)
+                StartCoroutine(HandleHotSeatDeath());
+            else
+                StartCoroutine(HandlePlayerDeath());
             return;
         }
 
@@ -109,9 +138,7 @@ public class Target : MonoBehaviour
     private IEnumerator HandlePlayerDeath()
     {
         // Disable input scripts so the player can't drive/aim/fire while dying.
-        if (TryGetComponent(out TowerController tc)) tc.enabled = false;
-        if (TryGetComponent(out ShootingControls sc)) sc.enabled = false;
-        if (TryGetComponent(out TankFlip tf)) tf.enabled = false;
+        DisablePlayerInput();
 
         // Long, heavy death pulse on both controllers.
         Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.7f, 0.9f, 0.5f);
@@ -121,6 +148,25 @@ public class Target : MonoBehaviour
 
         if (GameConfigManager.Instance != null)
             GameConfigManager.Instance.ReloadScene();
+    }
+
+    private IEnumerator HandleHotSeatDeath()
+    {
+        DisablePlayerInput();
+        Haptics.Pulse(this, OVRInput.Controller.LTouch, 0.7f, 0.9f, 0.5f);
+        Haptics.Pulse(this, OVRInput.Controller.RTouch, 0.7f, 0.9f, 0.5f);
+        HumanTankDestroyed?.Invoke(this);
+
+        // Leave the wreck long enough for the death effect to read, then clear it.
+        yield return new WaitForSeconds(1.5f);
+        Destroy(gameObject);
+    }
+
+    private void DisablePlayerInput()
+    {
+        if (TryGetComponent(out TowerController tc)) tc.enabled = false;
+        if (TryGetComponent(out ShootingControls sc)) sc.enabled = false;
+        if (TryGetComponent(out TankFlip tf)) tf.enabled = false;
     }
 
     private void SpawnHitExplosion(Vector3 position)

@@ -89,8 +89,6 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Tweakable = false, Category = "Controls", DisplayName = "Grip (VR)")]
     public string ctrlGrip = "Hold + move hand to drag yourself";
 
-    private const string MRSceneName = "SampleScene";
-    private const string VRSceneName = "VRMountains";
 
     void Awake()
     {
@@ -160,6 +158,15 @@ public class GameConfigManager : MonoBehaviour
     private int _enemiesAlive;
     private bool _winConditionArmed;
 
+    // Kept so the turn-based match can refresh the NavMesh in place after craters.
+    private NavMeshData _navMeshData;
+    private NavMeshBuildSettings _navMeshSettings;
+    private Bounds _navMeshBounds;
+    private GameEnvironment _navMeshEnvironment;
+
+    /// <summary>True once ConfigureEnemyTankMovementWhenReady has set up every enemy this round.</summary>
+    public bool EnemiesReady { get; private set; }
+
     /// <summary>
     /// Cached lookup for the gameplay "Floor" GameObject. The cache is invalidated
     /// when the referenced object is destroyed, so it survives scene reloads as long
@@ -224,6 +231,9 @@ public class GameConfigManager : MonoBehaviour
         _gameplayFloorCache = null;
         _enemiesAlive = 0;
         _winConditionArmed = false;
+        EnemiesReady = false;
+        _navMeshData = null;
+        _navMeshEnvironment = null;
 
         StopTrackedCoroutine(ref _debugPanelCoroutine);
         StopTrackedCoroutine(ref _spawnCoroutine);
@@ -256,6 +266,11 @@ public class GameConfigManager : MonoBehaviour
 
         _sceneStartupTriggered = true;
         Time.timeScale = 1f;
+
+        // The main menu has no world to start; this manager just carries over from the
+        // last match (it is DontDestroyOnLoad).
+        if (FindAnyObjectByType<MainMenu>(FindObjectsInactive.Include) != null)
+            return;
 
         GameEnvironment environment = FindSceneEnvironment();
         ConfigureMetaXRRuntime(environment.SuppressBoundary);
@@ -332,7 +347,25 @@ public class GameConfigManager : MonoBehaviour
 
         NavMeshData data = new NavMeshData(settings.agentTypeID);
         _navMeshDataInstance = NavMesh.AddNavMeshData(data);
+        _navMeshData = data;
+        _navMeshSettings = settings;
+        _navMeshBounds = bounds;
+        _navMeshEnvironment = environment;
         return NavMeshBuilder.UpdateNavMeshDataAsync(data, settings, sources, bounds);
+    }
+
+    /// <summary>
+    /// Re-bakes this round's NavMesh in place from the environment's current colliders, e.g.
+    /// after craters changed the terrain. Agents stay attached. Null if there is no NavMesh.
+    /// </summary>
+    public AsyncOperation RefreshRuntimeNavMesh()
+    {
+        if (_navMeshData == null || _navMeshEnvironment == null)
+            return null;
+
+        List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
+        NavMeshBuilder.CollectSources(_navMeshEnvironment.NavMeshSourceRoot, navMeshLayerMask, NavMeshCollectGeometry.PhysicsColliders, 0, new List<NavMeshBuildMarkup>(), sources);
+        return NavMeshBuilder.UpdateNavMeshDataAsync(_navMeshData, _navMeshSettings, sources, _navMeshBounds);
     }
 
     /// <summary>
@@ -473,6 +506,7 @@ public class GameConfigManager : MonoBehaviour
         // ordering and the singleton's lifecycle.
         _enemiesAlive = CountAliveEnemies();
         _winConditionArmed = _enemiesAlive > 0;
+        EnemiesReady = true;
     }
 
     private int CountAliveEnemies()
@@ -530,7 +564,9 @@ public class GameConfigManager : MonoBehaviour
     [DebugMember(Category = "Game Config")]
     public void SwitchMRVR()
     {
-        string target = SceneManager.GetActiveScene().name == VRSceneName ? MRSceneName : VRSceneName;
+        string target = SceneManager.GetActiveScene().name == GameSession.VirtualRealitySceneName
+            ? GameSession.MixedRealitySceneName
+            : GameSession.VirtualRealitySceneName;
         if (!Application.CanStreamedLevelBeLoaded(target))
         {
             Debug.LogWarning($"[GameConfig] Scene '{target}' is not in the build settings; cannot switch.");
@@ -539,6 +575,19 @@ public class GameConfigManager : MonoBehaviour
 
         ResetSceneStartupState();
         SceneManager.LoadScene(target);
+    }
+
+    [DebugMember(Category = "Game Config")]
+    public void BackToMenu()
+    {
+        if (!Application.CanStreamedLevelBeLoaded(GameSession.MenuSceneName))
+        {
+            Debug.LogWarning($"[GameConfig] Scene '{GameSession.MenuSceneName}' is not in the build settings.");
+            return;
+        }
+
+        ResetSceneStartupState();
+        SceneManager.LoadScene(GameSession.MenuSceneName);
     }
 
     [DebugMember(Category = "Game Config")]

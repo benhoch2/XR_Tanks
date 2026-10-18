@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -87,6 +88,11 @@ public class EnemyTankAI : MonoBehaviour
              "Lower = fires more often. Ignored by PatrolScan tanks (which fire whenever a scan ends).")]
     [SerializeField] private float chaseWanderVolleyCooldown = 3f;
 
+    [Header("Turn-based")]
+    [Tooltip("Fraction of the wind drift this tank aims off for on its turn (1 = perfect). " +
+             "Below 1 it misses in wind at first, then closes in through the usual aim correction.")]
+    [SerializeField] private float turnWindCompensation = 0.6f;
+
     [Header("Knockback")]
     [Tooltip("Effective mass for hit-impact knockback. Higher = less knockback from the same impulse. " +
              "The Heavy variant overrides this to be noticeably tankier than Light/Medium.")]
@@ -130,6 +136,15 @@ public class EnemyTankAI : MonoBehaviour
     // agent.Move so the agent's own pathing follows the slide instead of fighting it.
     private Vector3 _knockbackVelocity;
 
+    // Turn-based: the last target shot at, so aim correction resets when the target changes.
+    private Transform _lastTurnTarget;
+
+    /// <summary>
+    /// Turn-based play: no autonomous driving or shooting; the match drives the tank
+    /// through <see cref="TakeTurn"/> instead.
+    /// </summary>
+    public bool TurnBasedControl { get; set; }
+
     private void Awake()
     {
         _agent = GetComponent<NavMeshAgent>();
@@ -147,6 +162,7 @@ public class EnemyTankAI : MonoBehaviour
         }
 
         _lastBehaviorMode = behaviorMode;
+        TurnBasedControl = GameSession.IsTurnBased;
         ResetBehaviorState();
     }
 
@@ -186,6 +202,9 @@ public class EnemyTankAI : MonoBehaviour
 
         ApplyKnockbackStep();
 
+        if (TurnBasedControl)
+            return;
+
         switch (behaviorMode)
         {
             case BehaviorMode.PatrolScan:
@@ -224,6 +243,91 @@ public class EnemyTankAI : MonoBehaviour
         Quaternion tilt = Quaternion.FromToRotation(transform.up, groundUp);
         Quaternion target = tilt * transform.rotation * _bodyVisualBaseLocalRotation;
         _bodyVisual.rotation = Quaternion.RotateTowards(_bodyVisual.rotation, target, groundAlignSpeed * Time.deltaTime);
+    }
+
+    /// <summary>
+    /// One turn-based turn: a short drive (toward <paramref name="target"/>, or sideways when
+    /// already close), aim along the ballistic arc, one shot. Runs on the caller's coroutine;
+    /// it ends right after firing and the caller waits for the shot to resolve.
+    /// </summary>
+    public IEnumerator TakeTurn(Transform target, float driveBudget, float maxDriveTime)
+    {
+        if (target != null && driveBudget > 0f && _agent != null && _agent.enabled && _agent.isOnNavMesh)
+        {
+            Vector3 toTarget = target.position - transform.position;
+            toTarget.y = 0f;
+            Vector3 direction = toTarget.sqrMagnitude > 0.0001f ? toTarget.normalized : transform.forward;
+            if (toTarget.magnitude < chaseRange)
+                direction = Quaternion.Euler(0f, Random.value < 0.5f ? 90f : -90f, 0f) * direction;
+
+            if (NavMesh.SamplePosition(transform.position + direction * driveBudget, out NavMeshHit goal, 1f, NavMesh.AllAreas))
+            {
+                _agent.SetDestination(goal.position);
+                Vector3 start = transform.position;
+                float startTime = Time.time;
+                while (this != null && Time.time - startTime < maxDriveTime)
+                {
+                    Vector3 travelled = transform.position - start;
+                    travelled.y = 0f;
+                    if (travelled.magnitude >= driveBudget)
+                        break;
+                    if (!_agent.pathPending && _agent.remainingDistance <= 0.05f)
+                        break;
+
+                    DriveLikeTank(_agent.steeringTarget - transform.position);
+                    yield return null;
+                }
+
+                if (this == null)
+                    yield break;
+                if (_agent.isOnNavMesh)
+                    _agent.ResetPath();
+            }
+        }
+
+        if (target == null || enemyProjectilePrefab == null)
+            yield break;
+        if (GameConfigManager.Instance != null && !GameConfigManager.Instance.enemyShootingEnabled)
+            yield break;
+
+        // The learned aim correction only makes sense against the same target.
+        if (_lastTurnTarget != target)
+        {
+            _hasLastImpact = false;
+            _lastTurnTarget = target;
+        }
+
+        float aimStart = Time.time;
+        while (this != null && target != null && Time.time - aimStart < aimMaxDuration * 2f)
+        {
+            _currentAimTarget = WindCompensatedAim(target.position);
+            if (AimTurretAtWorldPosition(_currentAimTarget))
+                break;
+            yield return null;
+        }
+
+        yield return new WaitForSeconds(0.3f);
+        if (this == null || target == null)
+            yield break;
+
+        _currentAimTarget = WindCompensatedAim(target.position);
+        FireShot();
+    }
+
+    /// <summary>Aims upwind by part of the drift the shot will pick up on its way to <paramref name="targetPos"/>.</summary>
+    private Vector3 WindCompensatedAim(Vector3 targetPos)
+    {
+        Vector3 wind = Projectile.Wind;
+        if (wind == Vector3.zero || turnWindCompensation <= 0f)
+            return targetPos;
+
+        Vector3 firePos = GetFirePosition();
+        float distance = new Vector2(targetPos.x - firePos.x, targetPos.z - firePos.z).magnitude;
+        float speed = ComputeLaunchSpeed(distance, targetPos.y - firePos.y);
+        // Rough flight time: horizontal speed of a ~45° shot.
+        float flightTime = distance / Mathf.Max(0.1f, speed * 0.7f);
+        Vector3 drift = 0.5f * wind * flightTime * flightTime;
+        return targetPos - drift * turnWindCompensation;
     }
 
     private void EnsurePlayerCached()

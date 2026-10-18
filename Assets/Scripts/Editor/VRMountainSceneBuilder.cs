@@ -9,22 +9,31 @@ using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Generates the pure-VR scene from the MR scene: copies SampleScene, strips the
-/// MRUK / passthrough / occlusion building blocks and spawners, switches the camera and
-/// OVRManager to VR, sets up sky, fog and lighting, and adds the TerrainEnvironment and
-/// PlayerRigFollow. Re-running it rebuilds the scene from scratch.
+/// Generates the VR scenes from the MR scene (SampleScene), so the camera rig, managers
+/// and light stay in one place:
+/// <list type="bullet">
+/// <item>VRMountains — strips the MRUK / passthrough / occlusion building blocks and
+/// spawners, switches the camera and OVRManager to VR, sets up sky, fog and lighting, and
+/// adds the TerrainEnvironment, TurnBasedMatch and PlayerRigFollow.</item>
+/// <item>MainMenu — the same VR setup minus the game: just the menu and a ground disc.</item>
+/// </list>
+/// Re-running it rebuilds both from scratch. Build order: MainMenu, SampleScene, VRMountains.
 ///
 /// Batch mode (editor closed):
 ///   Unity.exe -batchmode -projectPath . -executeMethod VRMountainSceneBuilder.BuildFromCommandLine -quit
 ///   Unity.exe -batchmode -projectPath . -executeMethod VRMountainSceneBuilder.ValidateTerrain -validationOut &lt;dir&gt; -quit
+///   Unity.exe -batchmode -projectPath . -buildTarget Android -executeMethod VRMountainSceneBuilder.BuildQuestApk -quit
 /// </summary>
 public static class VRMountainSceneBuilder
 {
     private const string SourceScenePath = "Assets/Scenes/SampleScene.unity";
     private const string TargetScenePath = "Assets/Scenes/VRMountains.unity";
+    private const string MenuScenePath = "Assets/Scenes/MainMenu.unity";
     private const string MaterialFolder = "Assets/Materials/VR";
     private const string SkyMaterialPath = MaterialFolder + "/MountainSky.mat";
     private const string TerrainMaterialPath = MaterialFolder + "/MountainTerrain.mat";
+    private const string UnlitMaterialPath = MaterialFolder + "/UnlitColor.mat";
+    private const string MenuGroundMaterialPath = MaterialFolder + "/MenuGround.mat";
 
     private const string CameraRigName = "[BuildingBlock] Camera Rig";
 
@@ -44,15 +53,15 @@ public static class VRMountainSceneBuilder
 
     private static readonly Color HorizonColor = new Color(0.70f, 0.78f, 0.86f);
 
-    [MenuItem("XR Tanks/Build VR Mountains Scene")]
+    [MenuItem("XR Tanks/Build VR Scenes (Mountains + Main Menu)")]
     public static void BuildFromMenu()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             return;
 
-        if (File.Exists(TargetScenePath)
-            && !EditorUtility.DisplayDialog("Build VR Mountains Scene",
-                $"{TargetScenePath} already exists and will be regenerated from {SourceScenePath}. Continue?",
+        if ((File.Exists(TargetScenePath) || File.Exists(MenuScenePath))
+            && !EditorUtility.DisplayDialog("Build VR Scenes",
+                $"{TargetScenePath} and {MenuScenePath} will be regenerated from {SourceScenePath}. Continue?",
                 "Rebuild", "Cancel"))
             return;
 
@@ -66,12 +75,84 @@ public static class VRMountainSceneBuilder
 
     private static void Build()
     {
-        if (File.Exists(TargetScenePath))
-            AssetDatabase.DeleteAsset(TargetScenePath);
-        if (!AssetDatabase.CopyAsset(SourceScenePath, TargetScenePath))
-            throw new System.InvalidOperationException($"Could not copy {SourceScenePath} to {TargetScenePath}.");
+        BuildMountainScene();
+        BuildMenuScene();
 
-        Scene scene = EditorSceneManager.OpenScene(TargetScenePath, OpenSceneMode.Single);
+        SetBuildOrder(MenuScenePath, SourceScenePath, TargetScenePath);
+        AssetDatabase.SaveAssets();
+        EditorSceneManager.OpenScene(TargetScenePath, OpenSceneMode.Single);
+    }
+
+    private static void BuildMountainScene()
+    {
+        Scene scene = CreateVRSceneFromSource(TargetScenePath, out GameObject rig);
+        Material terrain = CreateOrUpdateMaterial(TerrainMaterialPath, "Universal Render Pipeline/Terrain/Lit", null);
+        Material unlit = CreateOrUpdateMaterial(UnlitMaterialPath, "Universal Render Pipeline/Unlit", null);
+
+        PlayerRigFollow follow = rig.GetComponent<PlayerRigFollow>();
+        if (follow == null)
+            follow = rig.AddComponent<PlayerRigFollow>();
+
+        var environmentObject = new GameObject("VR Environment");
+        SceneManager.MoveGameObjectToScene(environmentObject, scene);
+
+        var match = environmentObject.AddComponent<TurnBasedMatch>();
+        var matchSo = new SerializedObject(match);
+        SetReference(matchSo, "rigFollow", follow);
+        SetReference(matchSo, "unlitMaterial", unlit);
+        matchSo.ApplyModifiedPropertiesWithoutUndo();
+
+        var environment = environmentObject.AddComponent<TerrainEnvironment>();
+        var so = new SerializedObject(environment);
+        SetReference(so, "playerTankPrefab", LoadPrefab("Assets/Prefabs/TankFree_Red.prefab"));
+        SetReference(so, "enemyPrefab", LoadPrefab("Assets/Prefabs/TargetTankRandomizer.prefab"));
+        SetReference(so, "cratePrefab", LoadPrefab("Assets/Prefabs/TargetBox.prefab"));
+        SetReference(so, "terrainMaterial", terrain);
+        SetReference(so, "rigFollow", follow);
+        SetReference(so, "turnBasedMatch", match);
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        SaveScene(scene, TargetScenePath);
+    }
+
+    private static void BuildMenuScene()
+    {
+        Scene scene = CreateVRSceneFromSource(MenuScenePath, out GameObject rig);
+
+        // The menu starts no round; GameConfigManager comes in with the game scenes.
+        GameObject config = FindRoot(scene, "GameConfigManager");
+        if (config != null)
+            Object.DestroyImmediate(config);
+
+        Material unlit = CreateOrUpdateMaterial(UnlitMaterialPath, "Universal Render Pipeline/Unlit", null);
+        Material groundMaterial = CreateOrUpdateMaterial(MenuGroundMaterialPath, "Universal Render Pipeline/Lit",
+            m => m.color = new Color(0.33f, 0.5f, 0.24f));
+
+        var menu = rig.AddComponent<MainMenu>();
+        var so = new SerializedObject(menu);
+        SetReference(so, "unlitMaterial", unlit);
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        ground.name = "Menu Ground";
+        SceneManager.MoveGameObjectToScene(ground, scene);
+        ground.transform.localScale = new Vector3(30f, 0.01f, 30f);
+        ground.transform.position = new Vector3(0f, -0.01f, 0f);
+        ground.GetComponent<Renderer>().sharedMaterial = groundMaterial;
+        Object.DestroyImmediate(ground.GetComponent<Collider>());
+
+        SaveScene(scene, MenuScenePath);
+    }
+
+    /// <summary>Copies SampleScene to <paramref name="path"/> and turns it into a passthrough-free VR scene.</summary>
+    private static Scene CreateVRSceneFromSource(string path, out GameObject rig)
+    {
+        if (File.Exists(path))
+            AssetDatabase.DeleteAsset(path);
+        if (!AssetDatabase.CopyAsset(SourceScenePath, path))
+            throw new System.InvalidOperationException($"Could not copy {SourceScenePath} to {path}.");
+
+        Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
 
         foreach (string rootName in MixedRealityRoots)
         {
@@ -82,7 +163,7 @@ public static class VRMountainSceneBuilder
                 Debug.LogWarning($"[VRSceneBuilder] Expected MR root '{rootName}' not found; skipped.");
         }
 
-        GameObject rig = FindRoot(scene, CameraRigName);
+        rig = FindRoot(scene, CameraRigName);
         if (rig == null)
             throw new System.InvalidOperationException($"'{CameraRigName}' not found in {SourceScenePath}.");
 
@@ -90,31 +171,16 @@ public static class VRMountainSceneBuilder
         ConfigureCamera(rig);
 
         Material sky = CreateOrUpdateMaterial(SkyMaterialPath, "Skybox/Procedural", ConfigureSky);
-        Material terrain = CreateOrUpdateMaterial(TerrainMaterialPath, "Universal Render Pipeline/Terrain/Lit", null);
         ConfigureLighting(scene, sky);
+        return scene;
+    }
 
-        PlayerRigFollow follow = rig.GetComponent<PlayerRigFollow>();
-        if (follow == null)
-            follow = rig.AddComponent<PlayerRigFollow>();
-
-        var environmentObject = new GameObject("VR Environment");
-        SceneManager.MoveGameObjectToScene(environmentObject, scene);
-        var environment = environmentObject.AddComponent<TerrainEnvironment>();
-        var so = new SerializedObject(environment);
-        SetReference(so, "playerTankPrefab", LoadPrefab("Assets/Prefabs/TankFree_Red.prefab"));
-        SetReference(so, "enemyPrefab", LoadPrefab("Assets/Prefabs/TargetTankRandomizer.prefab"));
-        SetReference(so, "cratePrefab", LoadPrefab("Assets/Prefabs/TargetBox.prefab"));
-        SetReference(so, "terrainMaterial", terrain);
-        SetReference(so, "rigFollow", follow);
-        so.ApplyModifiedPropertiesWithoutUndo();
-
+    private static void SaveScene(Scene scene, string path)
+    {
         EditorSceneManager.MarkSceneDirty(scene);
         if (!EditorSceneManager.SaveScene(scene))
-            throw new System.InvalidOperationException($"Could not save {TargetScenePath}.");
-
-        AddToBuildSettings(TargetScenePath);
-        AssetDatabase.SaveAssets();
-        Debug.Log($"[VRSceneBuilder] Built {TargetScenePath}.");
+            throw new System.InvalidOperationException($"Could not save {path}.");
+        Debug.Log($"[VRSceneBuilder] Built {path}.");
     }
 
     private static void ConfigureOVRManager(GameObject rig)
@@ -214,13 +280,11 @@ public static class VRMountainSceneBuilder
         return material;
     }
 
-    private static void AddToBuildSettings(string scenePath)
+    /// <summary>Puts <paramref name="orderedPaths"/> first in the build settings, in that order, keeping any other scenes after them.</summary>
+    private static void SetBuildOrder(params string[] orderedPaths)
     {
-        List<EditorBuildSettingsScene> scenes = EditorBuildSettings.scenes.ToList();
-        if (scenes.Any(s => s.path == scenePath))
-            return;
-
-        scenes.Add(new EditorBuildSettingsScene(scenePath, true));
+        var scenes = orderedPaths.Select(path => new EditorBuildSettingsScene(path, true)).ToList();
+        scenes.AddRange(EditorBuildSettings.scenes.Where(existing => !orderedPaths.Contains(existing.path)));
         EditorBuildSettings.scenes = scenes.ToArray();
     }
 
@@ -256,8 +320,8 @@ public static class VRMountainSceneBuilder
     // ---------- Quest build ----------
 
     /// <summary>
-    /// Builds a Quest APK that boots straight into the VR scene (SampleScene second, for
-    /// SwitchMRVR), without touching the build settings. Run with -buildTarget Android so
+    /// Builds a Quest APK that boots into the main menu (then VRMountains and SampleScene),
+    /// without touching the build settings. Run with -buildTarget Android so
     /// the editor doesn't have to switch platforms mid-run. Optional -apkOut &lt;path&gt;.
     /// </summary>
     public static void BuildQuestApk()
@@ -266,7 +330,7 @@ public static class VRMountainSceneBuilder
     }
 
     /// <summary>Same build from the open editor, then installs and launches it on the USB-connected Quest.</summary>
-    [MenuItem("XR Tanks/Build and Run VR on Quest")]
+    [MenuItem("XR Tanks/Build and Run on Quest")]
     public static void BuildAndRunQuestFromMenu()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
@@ -280,7 +344,7 @@ public static class VRMountainSceneBuilder
 
         var options = new BuildPlayerOptions
         {
-            scenes = new[] { TargetScenePath, SourceScenePath },
+            scenes = new[] { MenuScenePath, TargetScenePath, SourceScenePath },
             locationPathName = output,
             target = BuildTarget.Android,
             targetGroup = BuildTargetGroup.Android,
@@ -341,7 +405,7 @@ public static class VRMountainSceneBuilder
                       $"height {stats.minHeight:F2}–{stats.maxHeight:F2} m, interior slope<35° {stats.drivablePercent:F0}%, " +
                       $"interior on NavMesh {stats.navMeshPercent:F0}%, " +
                       $"enemies {plan.enemies.Count}/{ValidationEnemies}, crates {plan.crates.Count}/{ValidationCrates}, " +
-                      $"player at ({plan.player.x:F1}, {plan.player.y:F2}, {plan.player.z:F1}) slope {environment.SlopeAt(plan.player):F0}° → {png}");
+                      $"player at ({plan.players[0].x:F1}, {plan.players[0].y:F2}, {plan.players[0].z:F1}) slope {environment.SlopeAt(plan.players[0]):F0}° → {png}");
 
             instance.Remove();
             Object.DestroyImmediate(data);
@@ -407,7 +471,7 @@ public static class VRMountainSceneBuilder
 
         foreach (Vector3 crate in plan.crates) DrawMarker(texture, origin, cell, crate, Color.yellow, 2);
         foreach (Vector3 enemy in plan.enemies) DrawMarker(texture, origin, cell, enemy, Color.red, 3);
-        DrawMarker(texture, origin, cell, plan.player, new Color(0.2f, 0.5f, 1f), 4);
+        foreach (Vector3 player in plan.players) DrawMarker(texture, origin, cell, player, new Color(0.2f, 0.5f, 1f), 4);
 
         texture.Apply();
         File.WriteAllBytes(path, texture.EncodeToPNG());

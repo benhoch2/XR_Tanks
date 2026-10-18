@@ -83,34 +83,63 @@ public class PlayerRigFollow : MonoBehaviour
     /// <summary>Starts following <paramref name="target"/>, using <paramref name="groundHeight"/> to find the floor under the head.</summary>
     public void SetTarget(Transform target, System.Func<Vector3, float> groundHeight)
     {
-        _target = target;
         _groundHeight = groundHeight;
+        SetTarget(target);
+    }
+
+    /// <summary>Follows a different tank, keeping the ground source. Null stops following (grip-drag still works).</summary>
+    public void SetTarget(Transform target)
+    {
+        _target = target;
         _followVelocity = Vector3.zero;
         _heightVelocity = 0f;
     }
 
-    /// <summary>Puts the head <see cref="behindDistance"/> behind the target, looking along its forward.</summary>
-    public void SnapBehindTarget()
+    /// <summary>Puts the head behind the target (default <see cref="behindDistance"/>), looking along its forward.</summary>
+    public void SnapBehindTarget(float distance = -1f)
     {
         if (_target == null || _groundHeight == null)
             return;
 
-        Transform head = _rig.centerEyeAnchor;
         Vector3 tankForward = Flat(_target.forward);
         if (tankForward.sqrMagnitude < 0.0001f)
-            tankForward = Flat(head.forward);
+            tankForward = Flat(_rig.centerEyeAnchor.forward);
         if (tankForward.sqrMagnitude < 0.0001f)
             tankForward = Vector3.forward;
         tankForward.Normalize();
 
-        // Yaw the rig about the head so the player ends up looking along the tank.
-        Vector3 headForward = Flat(head.forward);
-        if (headForward.sqrMagnitude > 0.0001f)
-            transform.RotateAround(head.position, Vector3.up, Vector3.SignedAngle(headForward, tankForward, Vector3.up));
+        float d = distance > 0f ? distance : behindDistance;
+        PlaceHead(_target.position - tankForward * d, tankForward);
+    }
 
-        Vector3 desiredHead = _target.position - tankForward * behindDistance;
-        Vector3 rigPosition = transform.position + Flat(desiredHead - head.position);
-        rigPosition.y = _groundHeight(desiredHead) + _heightOffset;
+    /// <summary>
+    /// Jumps the head to <paramref name="distance"/> from <paramref name="focus"/>, on the
+    /// <paramref name="fromDirection"/> side, looking at it. Used to show where a shot landed.
+    /// </summary>
+    public void ViewFrom(Vector3 focus, Vector3 fromDirection, float distance)
+    {
+        if (_groundHeight == null)
+            return;
+
+        Vector3 direction = Flat(fromDirection);
+        if (direction.sqrMagnitude < 0.0001f)
+            direction = -Flat(_rig.centerEyeAnchor.forward);
+        direction.Normalize();
+        PlaceHead(focus + direction * distance, -direction);
+    }
+
+    /// <summary>Instantly puts the head at <paramref name="headPosition"/> (horizontally) facing <paramref name="facing"/>.</summary>
+    private void PlaceHead(Vector3 headPosition, Vector3 facing)
+    {
+        Transform head = _rig.centerEyeAnchor;
+
+        // Yaw the rig about the head so the player ends up looking along `facing`.
+        Vector3 headForward = Flat(head.forward);
+        if (headForward.sqrMagnitude > 0.0001f && facing.sqrMagnitude > 0.0001f)
+            transform.RotateAround(head.position, Vector3.up, Vector3.SignedAngle(headForward, facing, Vector3.up));
+
+        Vector3 rigPosition = transform.position + Flat(headPosition - head.position);
+        rigPosition.y = _groundHeight(headPosition) + _heightOffset;
         transform.position = rigPosition;
 
         _followVelocity = Vector3.zero;
@@ -119,10 +148,10 @@ public class PlayerRigFollow : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (_target == null || _groundHeight == null)
+        if (_groundHeight == null)
             return;
 
-        if (_recenterAction.WasPressedThisFrame())
+        if (_target != null && _recenterAction.WasPressedThisFrame())
         {
             SnapBehindTarget();
             return;
@@ -133,7 +162,7 @@ public class PlayerRigFollow : MonoBehaviour
         Vector3 rigPosition = transform.position;
         bool snapped = false;
 
-        if (!UpdateGripDrag(ref rigPosition))
+        if (!UpdateGripDrag(ref rigPosition) && _target != null)
         {
             Vector3 toTarget = Flat(_target.position - head.position);
             float distance = toTarget.magnitude;

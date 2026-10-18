@@ -6,11 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 XR Tanks is a Unity 6 (`6000.3.12f1`) game for Meta Quest. The player drives a small (~13 cm) tank and shoots enemy tanks and crates. Rendering is URP. Input uses the new Input System with direct `<XRController>` bindings (no generated action asset wrapper).
 
-Two gameplay scenes share all code:
-- `Assets/Scenes/SampleScene.unity` — **MR**: the player's real room under passthrough, spawned onto the MRUK (Meta XR Mixed Reality Utility Kit) scene mesh. Build index 0.
-- `Assets/Scenes/VRMountains.unity` — **pure VR** (no passthrough, no MRUK): a procedural mountain valley, roughly 1:50 scale, with the player as a "giant" whose camera rig follows their tank. First step toward multiplayer. **Generated** by `Assets/Scripts/Editor/VRMountainSceneBuilder.cs` (menu *XR Tanks ▸ Build VR Mountains Scene*) from a copy of SampleScene. Re-run the builder after changing SampleScene's shared objects (camera rig, GameConfigManager, light) instead of hand-editing both.
+Scenes (build order):
+- `Assets/Scenes/MainMenu.unity` — **start screen** (`MainMenu`, laser + trigger): MR real-time, VR real-time, or VR turn-based with 1–4 hot-seat players and 1–6 AI tanks. Writes the choice to the static `GameSession` (mode + counts), which every scene reads. No GameConfigManager here; the DontDestroyOnLoad one from an earlier game skips startup when it sees `MainMenu`.
+- `Assets/Scenes/SampleScene.unity` — **MR**: the player's real room under passthrough, spawned onto the MRUK (Meta XR Mixed Reality Utility Kit) scene mesh.
+- `Assets/Scenes/VRMountains.unity` — **pure VR** (no passthrough, no MRUK): a procedural mountain valley, roughly 1:50 scale, with the player as a "giant" whose camera rig follows their tank. Plays real-time or turn-based (`GameSession.Mode`).
 
-The Immersive Debugger button `SwitchMRVR` toggles between them.
+MainMenu and VRMountains are **generated** by `Assets/Scripts/Editor/VRMountainSceneBuilder.cs` (menu *XR Tanks ▸ Build VR Scenes*) from copies of SampleScene, and the builder sets the build order. Re-run it after changing SampleScene's shared objects (camera rig, GameConfigManager, light) instead of hand-editing the copies. Launching a scene directly in the editor uses `GameSession` defaults (real-time).
+
+Immersive Debugger buttons `BackToMenu` and `SwitchMRVR` move between scenes.
 
 ## Build / Run
 
@@ -18,7 +21,8 @@ There are no CLI build scripts or tests. Development happens in the Unity Editor
 
 - Open the project in Unity `6000.3.12f1` (see `ProjectSettings/ProjectVersion.txt`).
 - Play mode in the editor works with the Meta XR Simulator / link cable. In the MR scene, MRUK room data is required — without it, `MRRoomEnvironment` falls back to the "Floor" GameObject and spawns the player tank in front of the main camera (no enemies spawn in that fallback). The VR scene needs no room data.
-- Batch mode (editor closed): `Unity.exe -batchmode -projectPath . -executeMethod VRMountainSceneBuilder.BuildFromCommandLine -quit` compiles everything and regenerates the VR scene; `-executeMethod VRMountainSceneBuilder.ValidateTerrain -validationOut <dir> -quit` generates 5 seeds, builds the runtime NavMesh, plans spawns, logs stats and writes top-down PNG maps.
+- Batch mode (editor closed): `Unity.exe -batchmode -projectPath . -executeMethod VRMountainSceneBuilder.BuildFromCommandLine -quit` compiles everything and regenerates the VR scenes; `-executeMethod VRMountainSceneBuilder.ValidateTerrain -validationOut <dir> -quit` generates 5 seeds, builds the runtime NavMesh, plans spawns, logs stats and writes top-down PNG maps; `-buildTarget Android -executeMethod VRMountainSceneBuilder.BuildQuestApk -quit` builds `Builds/OculusQuest/XRTanks_VR.apk`. With the editor open, *XR Tanks ▸ Build and Run on Quest* does the APK build + install + launch.
+- The project has the MCP for Unity package (`com.coplaydev.unity-mcp`, HTTP server on `127.0.0.1:8080`), so with the editor open Claude can compile, run builder methods, enter Play mode and read the console. The editor can't press controller buttons: to test turn-based flow in Play mode, rebind `TurnBasedMatch._readyAction` to the keyboard via reflection and call `ShootingControls.Shoot` directly.
 - Builds output to `Builds/OculusPC/` or `Builds/OculusQuest/` (gitignored).
 - Controller mappings are documented in `CONTROLS.md` and mirrored in `GameConfigManager` as read-only `[DebugMember]` strings that appear in the in-headset config menu. Keep the two in sync when a binding changes.
 
@@ -46,7 +50,20 @@ The environment's coroutines run on the environment itself (`environment.StartCo
 - `TerrainEnvironment` builds a runtime `TerrainData` + Terrain on the Default layer (layers and textures are generated in code, destroyed in `OnDestroy`), and adds invisible edge walls on **Ignore Raycast** (they block tanks and balls but stay out of LOS casts and the NavMesh). It tunes the NavMesh to slope 35° and voxel 0.04. Spawns come from `PlanSpawns()` with `System.Random(seed)`: the player in the flattest central spot, facing the nearest enemy; enemies on the NavMesh, ≥6 m from the player, with a complete path to the player; floating crates. An out-of-bounds guard respawns a player tank that falls through or leaves the map.
 - Seed: `GameConfigManager.vrTerrainSeed`, re-rolled each round while `vrNewTerrainEachRound` is on. Multiplayer later only needs to share the seed — except enemy variant picks, which `RandomEnemyVariant` still rolls with `UnityEngine.Random`.
 - `PlayerRigFollow` (on the camera rig root; never moves TrackingSpace): glides the rig after the tank once it is >1.5 m from the head, snaps past 4 m (teleport/respawn) or always with the `vrSnapFollow` comfort option, follows the terrain height under the head, grip-drag to move/rise, X to recenter behind the tank. Uses unscaled time so it works while the config menu pauses the game.
-- The scene's sky material, URP Terrain/Lit material (`Assets/Materials/VR/`), fog, Trilight ambient and the OVRManager/camera changes (passthrough off, Skybox clear) are all set by the builder.
+- The scene's sky material, URP Terrain/Lit material, URP Unlit material (lasers, text-adjacent markers; all in `Assets/Materials/VR/`), fog, Trilight ambient and the OVRManager/camera changes (passthrough off, Skybox clear) are all set by the builder.
+
+### VR scene: turn-based mode (`TurnBasedMatch`)
+
+Worms-style, selected from the main menu. `TerrainEnvironment.ApplySpawnCounts` takes the human/AI counts from `GameSession` (not the config menu) and spawns one tank per human; `SpawnActors` then calls `TurnBasedMatch.Begin`. The match waits for `GameConfigManager.EnemiesReady`, then alternates **teams** (humans vs AI), cycling through each team's living tanks.
+
+- **Human turn:** hot-seat hand-off banner ("pass the headset, press A"; skipped for a single human), then that tank's `TowerController` / `ShootingControls` / `TankFlip` are enabled with `DriveBudget` (fuel, meters) and `ShotsRemaining = 1`, a 30 s timer, and a gravity-only aim-preview arc. Every other human tank stays disabled. `ShootingControls.OnEnable` clears stale charge state so control can be handed back and forth.
+- **AI turn:** `EnemyTankAI.TurnBasedControl` (set in `Awake` from `GameSession`) stops all autonomous behaviour; the match runs `EnemyTankAI.TakeTurn`: short NavMesh drive, aim with partial wind compensation, one `FireShot`. Aim correction from the last impact still applies across turns (reset when the target changes).
+- **Resolution:** the turn ends when no live (non-kinematic) projectile remains; the rig jumps (`PlayerRigFollow.ViewFrom`) to watch the shot land.
+- **Explosions:** `Projectile.Exploded` (raised only by fuse/surface explosions, not direct Target hits) → `TerrainEnvironment.DigCrater` + blast damage/knockback to every `Target` in `blastRadius` via `Target.TakeDamage`. The NavMesh is refreshed in place (`GameConfigManager.RefreshRuntimeNavMesh`) between turns.
+- **Wind:** static `Projectile.Wind`, re-rolled each turn, applied in `Projectile.FixedUpdate`; shown as an arrow under the HUD. Reset to zero when the match is disabled.
+- **Death / end:** `Target.HumanTankDestroyed` (set by the match) replaces the reload-on-death for human tanks. All AI dead → the normal win reload; all humans dead → defeat banner and reload.
+- The match's hooks (`Projectile.Exploded`, `Target.HumanTankDestroyed`) are attached in `Begin`, not `OnEnable` — the component sits in the scene during real-time play too, which must keep plain explosions and reload-on-death.
+- HUD, banners, name tags, wind arrow and aim preview are created at runtime (TextMeshPro + LineRenderer). Non-UI TextMeshPro renders ~0.1 m per font-size point, so sizes are set as `fontSize = meters * 10`.
 
 Scene reload: `ReloadScene()` is exposed as an Immersive Debugger button, and is also called on win and on player death. `OnSceneLoaded` → `ResetSceneStartupState` stops every tracked coroutine handle (`_spawnCoroutine`, `_enemyConfigCoroutine`, `_debugPanelCoroutine`, `_winSequenceCoroutine`) and removes stale NavMesh data before re-running startup — the singleton outlives the scene, so untracked coroutines would otherwise keep touching destroyed objects.
 
@@ -61,6 +78,7 @@ Scene reload: `ReloadScene()` is exposed as an Immersive Debugger button, and is
 - `MRRoomEnvironment` — `GetGameplayFloor()` to move/toggle the fallback floor.
 - `TerrainEnvironment` — `vrNewTerrainEachRound` / `vrTerrainSeed` (reads, and writes the new seed).
 - `PlayerRigFollow` — `vrSnapFollow`.
+- `TurnBasedMatch` — `EnemiesReady`, `RefreshRuntimeNavMesh()`, `ReloadScene()` on defeat.
 
 Plus a one-time read in `ShootingControls.Start()` for `powerUpDuration`, `projectileMinSpeed`, `projectileMaxSpeed`.
 
@@ -149,6 +167,7 @@ Both waits use `WaitForSecondsRealtime` so they still complete with `Time.timeSc
 - The runtime NavMesh only includes colliders on the layers in `GameConfigManager.navMeshLayerMask` (serialized, defaults to `Default` only). Obstacle prefabs placed on Walls/Obstacles layers will be missing from the NavMesh and enemies will drive through them.
 - Projectile prefabs are cycled by *index* in `ShootingControls.projectilePrefabs` (A button cycles). Preview spawning re-parents a kinematic copy onto the tank with scale `previewScale` and adds a `BlinkRenderer`; destroy the old preview before creating a new one.
 - `Rotator` on enemy prefabs is force-disabled during enemy configuration — it's decorative for the un-configured prefab and fights the AI's own turret control.
-- Don't hand-edit `VRMountains.unity` for anything SampleScene also has — it is regenerated by the builder and edits would be lost. VR-only tuning belongs in the builder or in `TerrainEnvironment` / `PlayerRigFollow` defaults.
+- Static state that outlives scenes: `GameSession` (menu choice), `Projectile.Wind`, `Projectile.Exploded`, `Target.HumanTankDestroyed`. The last three must be cleared by whoever set them (TurnBasedMatch does it in `OnDisable`), or real-time rounds after a turn-based one would inherit wind and craters.
+- Don't hand-edit `VRMountains.unity` or `MainMenu.unity` for anything SampleScene also has — it is regenerated by the builder and edits would be lost. VR-only tuning belongs in the builder or in `TerrainEnvironment` / `PlayerRigFollow` defaults.
 - `Assets/_Recovery/` contains auto-recovered scene files; ignore them unless explicitly restoring work.
 - There is no `.cursor/rules/`, `.cursorrules`, or Copilot instructions file — this and `CONTROLS.md` are the only repo-level guidance files.

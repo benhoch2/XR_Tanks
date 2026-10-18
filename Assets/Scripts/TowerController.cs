@@ -31,6 +31,12 @@ public class TowerController : MonoBehaviour
     [Tooltip("How quickly knockback velocity decays back to zero (per second). Higher = stops sooner.")]
     [SerializeField] private float knockbackDamping = 6f;
 
+    /// <summary>
+    /// Meters the tank may still drive (turning is free). Infinite in real-time play; the
+    /// turn-based match sets it each turn as the tank's fuel.
+    /// </summary>
+    public float DriveBudget { get; set; } = float.PositiveInfinity;
+
     private InputAction moveAction;
     private InputAction aimAction;
     private float currentTilt = 0f;
@@ -110,6 +116,9 @@ public class TowerController : MonoBehaviour
             transform.Rotate(Vector3.up, turnInput * rotationSpeed * Time.deltaTime);
         if (Mathf.Abs(moveInput) > 0.01f)
         {
+            if (DriveBudget <= 0f)
+                return;
+
             Vector3 step = transform.forward * moveInput * moveSpeed * Time.deltaTime;
 
             // Drive along the ground under the leading edge rather than straight along the
@@ -126,6 +135,8 @@ public class TowerController : MonoBehaviour
             }
 
             transform.position += step;
+            if (!float.IsPositiveInfinity(DriveBudget))
+                DriveBudget = Mathf.Max(0f, DriveBudget - step.magnitude);
         }
     }
 

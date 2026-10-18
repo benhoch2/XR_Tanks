@@ -32,6 +32,22 @@ public class Projectile : MonoBehaviour
     // Used by EnemyTankAI to observe where its shots land so it can correct aim between shots.
     [System.NonSerialized] public System.Action<Vector3> onImpact;
 
+    /// <summary>
+    /// Raised when a projectile explodes on its own (fuse or surface hit) — not on direct
+    /// Target hits, which Target handles. The turn-based match digs craters and applies
+    /// blast damage from it; real-time play has no subscriber.
+    /// </summary>
+    public static event System.Action<Projectile, Vector3> Exploded;
+
+    /// <summary>
+    /// Horizontal acceleration (m/s²) applied to every live projectile. Zero in real-time
+    /// play; the turn-based match rolls a new wind each turn and resets it when it ends.
+    /// </summary>
+    public static Vector3 Wind;
+
+    /// <summary>True once the projectile has had its first real collision.</summary>
+    public bool HasImpacted { get; private set; }
+
     [Tooltip("Explosive shots ignore floor-like collisions only when they happen clearly above the gameplay floor.")]
     public float elevatedFloorIgnoreThreshold = 0.05f;
 
@@ -50,9 +66,12 @@ public class Projectile : MonoBehaviour
 
     private bool timerStarted = false;
     private bool teleportTimerStarted = false;
+    private Rigidbody _body;
 
     private void Awake()
     {
+        _body = GetComponent<Rigidbody>();
+
         if (bounciness <= 0f)
             return;
 
@@ -75,6 +94,13 @@ public class Projectile : MonoBehaviour
     {
         if (maxLifetime > 0f)
             Destroy(gameObject, maxLifetime);
+    }
+
+    private void FixedUpdate()
+    {
+        // Kinematic copies (the projectile preview on the player tank) don't drift.
+        if (Wind != Vector3.zero && _body != null && !_body.isKinematic)
+            _body.AddForce(Wind, ForceMode.Acceleration);
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -109,6 +135,8 @@ public class Projectile : MonoBehaviour
                 }
             }
         }
+
+        HasImpacted = true;
 
         // Fire the one-shot impact callback before type-specific handling can destroy us.
         if (onImpact != null)
@@ -176,13 +204,13 @@ public class Projectile : MonoBehaviour
 
     private void Explode()
     {
-        SpawnExplosionEffect(transform.position);
-        Destroy(gameObject);
+        Explode(transform.position);
     }
 
     private void Explode(Vector3 position)
     {
         SpawnExplosionEffect(position);
+        Exploded?.Invoke(this, position);
         Destroy(gameObject);
     }
 

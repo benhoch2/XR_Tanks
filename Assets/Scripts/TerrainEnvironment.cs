@@ -24,6 +24,8 @@ public class TerrainEnvironment : GameEnvironment
     [Tooltip("URP Terrain/Lit material. Referenced from the scene so the shader ships in builds.")]
     [SerializeField] private Material terrainMaterial;
     [SerializeField] private PlayerRigFollow rigFollow;
+    [Tooltip("Runs turn-based rounds (GameSession.Mode). Idle in real-time play.")]
+    [SerializeField] private TurnBasedMatch turnBasedMatch;
 
     [Header("Terrain")]
     [SerializeField] private MountainTerrainGenerator.Settings terrainSettings = new MountainTerrainGenerator.Settings();
@@ -34,6 +36,8 @@ public class TerrainEnvironment : GameEnvironment
     [Tooltip("Minimum distance from the player to any enemy at spawn. Keep above the enemies' chase range.")]
     [SerializeField] private float minEnemyDistanceFromPlayer = 6f;
     [SerializeField] private float minEnemySpacing = 2f;
+    [Tooltip("Turn-based hot-seat: minimum distance between human tanks at spawn.")]
+    [SerializeField] private float minHumanSpacing = 4f;
     [SerializeField] private float minCrateDistanceFromPlayer = 1.5f;
     [Tooltip("Crates float this high above the ground (min, max), in meters. Floater bobs ±0.1 around it.")]
     [SerializeField] private Vector2 crateHeightRange = new Vector2(0.2f, 0.6f);
@@ -49,12 +53,14 @@ public class TerrainEnvironment : GameEnvironment
     /// <summary>Where SpawnActors puts everything. Planned first so the editor validation can inspect it.</summary>
     public class SpawnPlan
     {
-        public Vector3 player;
+        /// <summary>Human tanks; the first is the flattest central spot.</summary>
+        public readonly List<Vector3> players = new List<Vector3>();
         public readonly List<Vector3> enemies = new List<Vector3>();
         public readonly List<Vector3> crates = new List<Vector3>();
     }
 
     private int _seed;
+    private int _humanCount = 1;
     private int _enemyCount;
     private int _crateCount;
     private float[,] _heights;
@@ -63,9 +69,14 @@ public class TerrainEnvironment : GameEnvironment
     private TerrainData _terrainData;
     private readonly List<Object> _runtimeAssets = new List<Object>();
 
-    private Transform _playerTank;
-    private Vector3 _playerSpawnPosition;
-    private Quaternion _playerSpawnRotation;
+    private readonly List<SpawnedTank> _humanTanks = new List<SpawnedTank>();
+
+    private struct SpawnedTank
+    {
+        public Transform tank;
+        public Vector3 position;
+        public Quaternion rotation;
+    }
 
     public int Seed => _seed;
     public MountainTerrainGenerator.Settings TerrainSettings => terrainSettings;
@@ -90,7 +101,9 @@ public class TerrainEnvironment : GameEnvironment
 
     public override void ApplySpawnCounts(int enemies, int crates)
     {
-        _enemyCount = enemies;
+        // Turn-based rounds take their line-up from the main menu instead of the config menu.
+        _humanCount = GameSession.IsTurnBased ? Mathf.Clamp(GameSession.HumanPlayers, 1, GameSession.MaxHumanPlayers) : 1;
+        _enemyCount = GameSession.IsTurnBased ? Mathf.Clamp(GameSession.AiTanks, 1, GameSession.MaxAiTanks) : enemies;
         _crateCount = crates;
     }
 
@@ -124,7 +137,13 @@ public class TerrainEnvironment : GameEnvironment
         Transform actorsRoot = new GameObject("Actors").transform;
         actorsRoot.SetParent(transform, false);
 
-        SpawnPlayer(plan, actorsRoot);
+        var humans = new List<Transform>();
+        for (int i = 0; i < plan.players.Count; i++)
+        {
+            Transform tank = SpawnPlayer(plan, i, actorsRoot);
+            if (tank != null)
+                humans.Add(tank);
+        }
 
         if (enemyPrefab != null)
         {
@@ -142,6 +161,16 @@ public class TerrainEnvironment : GameEnvironment
                 Instantiate(cratePrefab, point, RandomYaw(rng), actorsRoot);
         }
 
+        if (rigFollow != null && humans.Count > 0)
+        {
+            rigFollow.SetTarget(humans[0], GetGroundHeight);
+            rigFollow.SnapBehindTarget();
+        }
+
+        // Turn-based: the match retargets the rig each turn (it keeps the ground source set above).
+        if (GameSession.IsTurnBased && turnBasedMatch != null)
+            turnBasedMatch.Begin(this, humans);
+
         yield break;
     }
 
@@ -154,13 +183,29 @@ public class TerrainEnvironment : GameEnvironment
         var rng = new System.Random(_seed);
         var plan = new SpawnPlan();
 
-        if (!TryFindPlayerSpawn(rng, out plan.player))
+        if (!TryFindPlayerSpawn(rng, out Vector3 firstPlayer))
         {
             Debug.LogWarning("[Terrain] No flat NavMesh point near the center; spawning the player at the center.");
-            plan.player = GroundPoint(TerrainCenter);
+            firstPlayer = GroundPoint(TerrainCenter);
+        }
+        plan.players.Add(firstPlayer);
+
+        // Further hot-seat players: anywhere flat on the NavMesh, spread apart.
+        for (int n = 1; n < _humanCount; n++)
+        {
+            for (int attempt = 0; attempt < placementAttemptsPerActor; attempt++)
+            {
+                Vector3 candidate = RandomInteriorGroundPoint(rng);
+                if (SlopeAt(candidate) > maxSpawnSlope) continue;
+                if (IsWithin(plan.players, candidate, minHumanSpacing)) continue;
+                if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 0.3f, NavMesh.AllAreas)) continue;
+
+                plan.players.Add(hit.position);
+                break;
+            }
         }
 
-        bool playerOnNavMesh = NavMesh.SamplePosition(plan.player, out NavMeshHit playerHit, 0.5f, NavMesh.AllAreas);
+        bool playerOnNavMesh = NavMesh.SamplePosition(firstPlayer, out NavMeshHit playerHit, 0.5f, NavMesh.AllAreas);
         var path = new NavMeshPath();
 
         for (int n = 0; n < _enemyCount; n++)
@@ -169,7 +214,7 @@ public class TerrainEnvironment : GameEnvironment
             {
                 Vector3 candidate = RandomInteriorGroundPoint(rng);
                 if (SlopeAt(candidate) > maxSpawnSlope) continue;
-                if (HorizontalDistance(candidate, plan.player) < minEnemyDistanceFromPlayer) continue;
+                if (IsWithin(plan.players, candidate, minEnemyDistanceFromPlayer)) continue;
                 if (IsWithin(plan.enemies, candidate, minEnemySpacing)) continue;
                 if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 0.3f, NavMesh.AllAreas)) continue;
 
@@ -190,7 +235,7 @@ public class TerrainEnvironment : GameEnvironment
             {
                 Vector3 candidate = RandomInteriorGroundPoint(rng);
                 if (SlopeAt(candidate) > CrateMaxSlope) continue;
-                if (HorizontalDistance(candidate, plan.player) < minCrateDistanceFromPlayer) continue;
+                if (IsWithin(plan.players, candidate, minCrateDistanceFromPlayer)) continue;
 
                 float height = Mathf.Lerp(crateHeightRange.x, crateHeightRange.y, (float)rng.NextDouble());
                 plan.crates.Add(candidate + Vector3.up * height);
@@ -198,9 +243,10 @@ public class TerrainEnvironment : GameEnvironment
             }
         }
 
-        if (plan.enemies.Count < _enemyCount || plan.crates.Count < _crateCount)
+        if (plan.players.Count < _humanCount || plan.enemies.Count < _enemyCount || plan.crates.Count < _crateCount)
         {
-            Debug.LogWarning($"[Terrain] Placed {plan.enemies.Count}/{_enemyCount} enemies and " +
+            Debug.LogWarning($"[Terrain] Placed {plan.players.Count}/{_humanCount} players, " +
+                             $"{plan.enemies.Count}/{_enemyCount} enemies and " +
                              $"{plan.crates.Count}/{_crateCount} crates on seed {_seed}.");
         }
 
@@ -229,15 +275,108 @@ public class TerrainEnvironment : GameEnvironment
 
     private void Update()
     {
-        if (_playerTank == null)
+        // Teleport shots and physics tunnelling can put a tank past the walls or under
+        // the terrain, where it would fall forever. Put it back where it started.
+        float limit = terrainSettings.size * 0.5f + 0.5f;
+        foreach (SpawnedTank human in _humanTanks)
+        {
+            if (human.tank == null)
+                continue;
+
+            Vector3 offset = human.tank.position - TerrainCenter;
+            if (human.tank.position.y < _minGroundY - 2f || Mathf.Abs(offset.x) > limit || Mathf.Abs(offset.z) > limit)
+                RespawnPlayer(human);
+        }
+    }
+
+    /// <summary>
+    /// Carves an ellipsoid crater (horizontal <paramref name="radius"/>, vertical
+    /// <paramref name="depth"/>) centered on <paramref name="center"/> and paints it as dirt.
+    /// Ground is only ever lowered, so a blast in mid-air out of reach leaves no mark.
+    /// Callers must refresh the NavMesh afterwards.
+    /// </summary>
+    public void DigCrater(Vector3 center, float radius, float depth)
+    {
+        if (_terrainData == null || radius <= 0f || depth <= 0f)
             return;
 
-        // Teleport shots and physics tunnelling can put the tank past the walls or under
-        // the terrain, where it would fall forever. Put it back where it started.
-        Vector3 offset = _playerTank.position - TerrainCenter;
-        float limit = terrainSettings.size * 0.5f + 0.5f;
-        if (_playerTank.position.y < _minGroundY - 2f || Mathf.Abs(offset.x) > limit || Mathf.Abs(offset.z) > limit)
-            RespawnPlayer();
+        MountainTerrainGenerator.Settings s = terrainSettings;
+        Vector3 local = center - TerrainOrigin;
+
+        int res = _terrainData.heightmapResolution;
+        float cell = s.size / (res - 1);
+        if (!CellRange(local, radius, cell, res, out int x0, out int z0, out int width, out int length))
+            return;
+
+        float[,] heights = _terrainData.GetHeights(x0, z0, width, length);
+        bool changed = false;
+        for (int zi = 0; zi < length; zi++)
+        {
+            for (int xi = 0; xi < width; xi++)
+            {
+                float dx = (x0 + xi) * cell - local.x;
+                float dz = (z0 + zi) * cell - local.z;
+                float t = (dx * dx + dz * dz) / (radius * radius);
+                if (t >= 1f)
+                    continue;
+
+                float bottom = (local.y - depth * Mathf.Sqrt(1f - t)) / s.maxHeight;
+                if (bottom < heights[zi, xi])
+                {
+                    heights[zi, xi] = Mathf.Max(0f, bottom);
+                    changed = true;
+                }
+            }
+        }
+
+        if (!changed)
+            return;
+
+        _terrainData.SetHeights(x0, z0, heights);
+        PaintCrater(local, radius * 1.15f);
+    }
+
+    private void PaintCrater(Vector3 local, float radius)
+    {
+        int res = _terrainData.alphamapResolution;
+        float cell = terrainSettings.size / (res - 1);
+        if (!CellRange(local, radius, cell, res, out int x0, out int z0, out int width, out int length))
+            return;
+
+        float[,,] maps = _terrainData.GetAlphamaps(x0, z0, width, length);
+        int layers = maps.GetLength(2);
+        for (int zi = 0; zi < length; zi++)
+        {
+            for (int xi = 0; xi < width; xi++)
+            {
+                float dx = (x0 + xi) * cell - local.x;
+                float dz = (z0 + zi) * cell - local.z;
+                float scorch = 1f - Mathf.Clamp01(Mathf.Sqrt(dx * dx + dz * dz) / radius);
+                if (scorch <= 0f)
+                    continue;
+
+                // Blend toward bare dirt; lerping every layer keeps the weights summing to 1.
+                for (int l = 0; l < layers; l++)
+                {
+                    float targetWeight = l == MountainTerrainGenerator.DirtLayer ? 1f : 0f;
+                    maps[zi, xi, l] = Mathf.Lerp(maps[zi, xi, l], targetWeight, scorch);
+                }
+            }
+        }
+
+        _terrainData.SetAlphamaps(x0, z0, maps);
+    }
+
+    /// <summary>Grid cells (clamped to the map) covering a circle of <paramref name="radius"/> around map-local <paramref name="local"/>.</summary>
+    private static bool CellRange(Vector3 local, float radius, float cell, int res, out int x0, out int z0, out int width, out int length)
+    {
+        x0 = Mathf.Clamp(Mathf.FloorToInt((local.x - radius) / cell), 0, res - 1);
+        z0 = Mathf.Clamp(Mathf.FloorToInt((local.z - radius) / cell), 0, res - 1);
+        int x1 = Mathf.Clamp(Mathf.CeilToInt((local.x + radius) / cell), 0, res - 1);
+        int z1 = Mathf.Clamp(Mathf.CeilToInt((local.z + radius) / cell), 0, res - 1);
+        width = x1 - x0 + 1;
+        length = z1 - z0 + 1;
+        return x1 > x0 && z1 > z0;
     }
 
     private void OnDestroy()
@@ -434,48 +573,43 @@ public class TerrainEnvironment : GameEnvironment
         return bestSlope < float.MaxValue;
     }
 
-    private void SpawnPlayer(SpawnPlan plan, Transform parent)
+    private Transform SpawnPlayer(SpawnPlan plan, int index, Transform parent)
     {
         if (playerTankPrefab == null)
         {
             Debug.LogWarning("[Terrain] No player tank prefab assigned.");
-            return;
+            return null;
         }
 
         // Start facing the nearest enemy so the action is in front of the player.
-        Vector3 facing = TerrainCenter - plan.player;
+        Vector3 position = plan.players[index];
+        Vector3 facing = TerrainCenter - position;
         float nearest = float.MaxValue;
         foreach (Vector3 enemy in plan.enemies)
         {
-            float d = HorizontalDistance(enemy, plan.player);
+            float d = HorizontalDistance(enemy, position);
             if (d < nearest)
             {
                 nearest = d;
-                facing = enemy - plan.player;
+                facing = enemy - position;
             }
         }
 
-        GameObject tank = Instantiate(playerTankPrefab, plan.player, Quaternion.identity, parent);
+        GameObject tank = Instantiate(playerTankPrefab, position, Quaternion.identity, parent);
+        tank.name = $"Player {index + 1} Tank";
         FaceHorizontally(tank.transform, facing);
-        SnapBottomToHeight(tank, GetGroundHeight(plan.player));
+        SnapBottomToHeight(tank, GetGroundHeight(position));
 
-        _playerTank = tank.transform;
-        _playerSpawnPosition = _playerTank.position;
-        _playerSpawnRotation = _playerTank.rotation;
-
-        if (rigFollow != null)
-        {
-            rigFollow.SetTarget(_playerTank, GetGroundHeight);
-            rigFollow.SnapBehindTarget();
-        }
+        _humanTanks.Add(new SpawnedTank { tank = tank.transform, position = tank.transform.position, rotation = tank.transform.rotation });
+        return tank.transform;
     }
 
-    private void RespawnPlayer()
+    private void RespawnPlayer(SpawnedTank human)
     {
-        Debug.LogWarning("[Terrain] Player tank left the map; respawning it at its start point.");
-        _playerTank.SetPositionAndRotation(_playerSpawnPosition, _playerSpawnRotation);
+        Debug.LogWarning($"[Terrain] {human.tank.name} left the map; respawning it at its start point.");
+        human.tank.SetPositionAndRotation(human.position, human.rotation);
 
-        Rigidbody rb = _playerTank.GetComponent<Rigidbody>();
+        Rigidbody rb = human.tank.GetComponent<Rigidbody>();
         if (rb != null)
         {
             rb.linearVelocity = Vector3.zero;
